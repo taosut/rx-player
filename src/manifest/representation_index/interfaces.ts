@@ -30,8 +30,26 @@ export interface ISmoothInitSegmentPrivateInfos {
   };
 }
 
+// privateInfos specific to rxp-manifest
+export interface IRXPSegmentPrivateInfos {
+  load : (
+    callbacks : {
+      resolve : (args: {
+        data : ArrayBuffer|Uint8Array;
+        size : number;
+        duration : number;
+      }) => void;
+
+      reject : (err? : Error) => void;
+    }
+  ) =>
+    // returns either the aborting callback or nothing
+    (() => void)|void;
+}
+
 export interface IPrivateInfos {
   smoothInit? : ISmoothInitSegmentPrivateInfos;
+  rxpSegment? : IRXPSegmentPrivateInfos;
 }
 
 // ISegment Object.
