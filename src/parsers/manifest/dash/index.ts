@@ -24,7 +24,7 @@ import { IParsedManifest } from "../types";
  */
 export default function parseFromDocument(
   document: Document,
-  uri : string/*,*/
+  uri : string|null/*,*/
   // contentProtectionParser?: IContentProtectionParser
 ) : IParsedManifest {
   const root = document.documentElement;

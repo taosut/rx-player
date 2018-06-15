@@ -228,7 +228,7 @@ const getLastLiveTimeReference = (
 
 export default function parseManifest(
   root: Element,
-  uri : string
+  uri : string|null
   // contentProtectionParser?: IContentProtectionParser
 ) : IParsedManifest {
   // Transform whole MPD into a parsed JS object representation
@@ -237,7 +237,7 @@ export default function parseManifest(
     attributes: rootAttributes,
   } = createMPDIntermediateRepresentation(root);
 
-  const mpdRootURL = resolveURL(normalizeBaseURL(uri), rootChildren.baseURL);
+  const mpdRootURL = resolveURL(normalizeBaseURL(uri || ""), rootChildren.baseURL);
 
   const parsedPeriods : IParsedPeriod[] = [];
   for (let i = 0; i < rootChildren.periods.length; i++) {
@@ -705,7 +705,7 @@ export default function parseManifest(
     periods: parsedPeriods,
     transportType: "dash",
     isLive: rootAttributes.type === "dynamic",
-    uris: [uri, ...rootChildren.locations],
+    uris: uri ? [uri, ...rootChildren.locations] : rootChildren.locations,
     suggestedPresentationDelay: rootAttributes.suggestedPresentationDelay != null ?
       rootAttributes.suggestedPresentationDelay :
       config.DEFAULT_SUGGESTED_PRESENTATION_DELAY.DASH,

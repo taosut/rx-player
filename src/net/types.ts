@@ -115,7 +115,7 @@ export type ILoaderObservable<T> = Observable<ILoaderEvent<T>>;
 
 export interface IManifestParserArguments<T> {
   response : ILoaderResponseValue<T>;
-  url : string;
+  url : string|null;
 }
 
 export interface ISegmentParserArguments<T> {
@@ -131,7 +131,7 @@ export interface ISegmentParserArguments<T> {
 
 export interface IManifestResult {
   manifest: IParsedManifest; // the manifest itself
-  url? : string; // final URL of the manifest
+  url : string|null; // final URL of the manifest
 }
 
 export type IManifestParserObservable = Observable<IManifestResult>;
@@ -187,13 +187,13 @@ export type ImageParserObservable = Observable<{
                           // "real" wanted effective times.
 }>;
 
-interface ITransportManifestPipeline {
+export interface ITransportManifestPipeline {
   // TODO Remove resolver
   resolver?: (x : IManifestLoaderArguments) =>
     Observable<IManifestLoaderArguments>;
   loader: (x : IManifestLoaderArguments) =>
-    ILoaderObservable<Document|string>;
-  parser: (x : IManifestParserArguments<Document|string>) =>
+    ILoaderObservable<any>;
+  parser: (x : IManifestParserArguments<any>) =>
     IManifestParserObservable;
 }
 
@@ -298,7 +298,7 @@ export type CustomManifestLoader = (
   // second argument: callbacks
   callbacks : {
     resolve : (args: {
-      data : Document|string;
+      data : any;
       size : number;
       duration : number;
     }) => void;

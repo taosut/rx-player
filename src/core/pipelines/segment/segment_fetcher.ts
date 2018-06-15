@@ -39,7 +39,6 @@ import {
 } from "../../abr";
 import { IBufferType } from "../../source_buffers";
 import BasePipeline, {
-  IPipelineCache,
   IPipelineData,
   IPipelineOptions,
 } from "../core_pipeline";
@@ -182,12 +181,9 @@ export default function createSegmentFetcher<T>(
         }
       }),
 
-      filter((
-        arg
-      ) : arg is
-        IPipelineData<ISegmentResponseParsed<T>>|
-        IPipelineCache<ISegmentResponseParsed<T>> =>
-        arg.type === "data" || arg.type === "cache"
+      filter(
+        (arg) : arg is IPipelineData<ISegmentResponseParsed<T>> =>
+          arg.type === "data"
       ),
 
       // take only value from data/cache events

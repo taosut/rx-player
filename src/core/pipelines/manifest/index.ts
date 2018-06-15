@@ -36,14 +36,12 @@ import {
   IManifestResult,
 } from "../../../net/types";
 import Pipeline, {
-  IPipelineCache,
   IPipelineData,
   IPipelineOptions,
 } from "../core_pipeline";
+import parseManifestData from "./parse_manifest_data";
 
-type IPipelineManifestResult =
-  IPipelineData<IManifestResult> |
-  IPipelineCache<IManifestResult>;
+type IPipelineManifestResult = IPipelineData<IManifestResult>;
 
 type IPipelineManifestOptions =
   IPipelineOptions<IManifestLoaderArguments, Document|string>;
@@ -73,7 +71,7 @@ export default function createManifestPipeline(
 ) : (url : string) => Observable<Manifest> {
   return function fetchManifest(url : string) {
     const manifest$ = Pipeline<
-      IManifestLoaderArguments, Document|string, IManifestResult
+      IManifestLoaderArguments, any, IManifestResult
     >(transport.manifest, pipelineOptions)({ url });
 
     return manifest$.pipe(
@@ -84,9 +82,7 @@ export default function createManifestPipeline(
         }
       }),
 
-      filter((arg) : arg is IPipelineManifestResult =>
-        arg.type === "data" || arg.type === "cache"
-      ),
+      filter((arg) : arg is IPipelineManifestResult => arg.type === "data"),
 
       map(({ value }) : Manifest => {
         return createManifest(
@@ -100,3 +96,5 @@ export default function createManifestPipeline(
     );
   };
 }
+
+export { parseManifestData };

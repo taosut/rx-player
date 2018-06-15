@@ -20,17 +20,44 @@ import {
 } from "rxjs";
 
 /**
+ * Try to execute the given function, which returns an Observable.
+ * If the function throws, throw the error through an Observable error.
+ *
+ * Type parameters:
+ *   - R: type of the items emitted by the Observable
+ * @param {Function} func - A function you want to execute
+ * @returns {*} - If it fails, returns a throwing Observable, else the
+ * function's result (which should be, in most cases, an Observable).
+ */
+export default function tryCatch<R>(
+  func : () => Observable<R>
+) : Observable<R>|Observable<never> {
+  try {
+    return func();
+  } catch (e) {
+    return observableThrow(e);
+  }
+}
+
+/**
+ * Like tryCatch but with the possibility to add an argument to the concerned
+ * function.
+ *
+ * Type parameters:
+ *   - T: type of the argument given to the function
+ *   - R: type of the items emitted by the Observable
  * @param {Function} func - A function you want to execute
  * @param {*} args - The function's argument
  * @returns {*} - If it fails, returns a throwing Observable, else the
  * function's result (which should be, in most cases, an Observable).
  */
-export default function tryCatch<T, I>(
-  func : (args? : T) => Observable<I>,
-  args? : T
-) : Observable<I>|Observable<never> {
+export function tryCatchWithArg<T, R>(
+  func : (arg : T) => Observable<R>,
+  arg : T
+) : Observable<R>|Observable<never> {
   try {
-    return func(args);
+    // ugly TS Hack
+    return func(arg);
   } catch (e) {
     return observableThrow(e);
   }

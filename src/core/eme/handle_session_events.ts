@@ -158,7 +158,6 @@ export default function handleSessionEvents(
       });
 
       return handledKeyStatusesChange$
-        .pipe() // TS or RxJS Bug?
         .pipe(
           catchError((error: Error) => {
             throw new EncryptedMediaError("KEY_STATUS_CHANGE_ERROR", error, true);
