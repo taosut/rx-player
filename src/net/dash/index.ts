@@ -20,39 +20,27 @@
  */
 
 import { of as observableOf } from "rxjs";
-import features from "../../features";
-import {
-  getMDHDTimescale,
-  getSegmentsFromSidx,
-} from "../../parsers/containers/isobmff";
-import {
-  getSegmentsFromCues,
-  getTimeCodeScale,
-} from "../../parsers/containers/matroska";
 import dashManifestParser from "../../parsers/manifest/dash";
-import request from "../../utils/request";
-import generateManifestLoader from "../utils/manifest_loader";
-import getISOBMFFTimingInfos from "./isobmff_timing_infos";
-import generateSegmentLoader from "./segment_loader";
-import {
-  loader as TextTrackLoader,
-  parser as TextTrackParser,
-} from "./texttracks";
-import { addNextSegments } from "./utils";
-
 import {
   CustomManifestLoader,
   CustomSegmentLoader,
   ILoaderObservable,
-  ImageParserObservable,
   IManifestLoaderArguments,
   IManifestParserArguments,
   IManifestParserObservable,
-  ISegmentLoaderArguments,
-  ISegmentParserArguments,
   ITransportPipelines,
-  SegmentParserObservable,
 } from "../types";
+import generateManifestLoader from "../utils/manifest_loader";
+import {
+  loader as imageLoader,
+  parser as imageParser,
+} from "./images";
+import generateSegmentLoader from "./segment_loader";
+import segmentParser from "./segment_parser";
+import {
+  loader as textTrackLoader,
+  parser as textTrackParser,
+} from "./texttracks";
 
 interface IDASHOptions {
   manifestLoader? : CustomManifestLoader;
@@ -95,132 +83,18 @@ export default function(
   };
 
   const segmentPipeline = {
-    loader({ adaptation, init, manifest, period, representation, segment }
-      : ISegmentLoaderArguments
-    ) : ILoaderObservable<Uint8Array|ArrayBuffer|null> {
-      return segmentLoader({
-        adaptation,
-        init,
-        manifest,
-        period,
-        representation,
-        segment,
-      });
-    },
-
-    parser({
-      response,
-      infos,
-    } : ISegmentParserArguments<Uint8Array|ArrayBuffer|null>
-    ) : SegmentParserObservable {
-      const {
-        segment,
-        representation,
-        init,
-      } = infos;
-      const { responseData } = response;
-      if (responseData == null) {
-        return observableOf({
-          segmentData: null,
-          segmentInfos: null,
-          segmentOffset: 0,
-        });
-      }
-      const segmentData : Uint8Array = responseData instanceof Uint8Array ?
-        responseData :
-        new Uint8Array(responseData);
-      const indexRange = segment.indexRange;
-      const isWEBM = representation.mimeType === "video/webm" ||
-        representation.mimeType === "audio/webm";
-      const nextSegments = isWEBM ?
-        getSegmentsFromCues(segmentData, 0) :
-        getSegmentsFromSidx(segmentData, indexRange ? indexRange[0] : 0);
-
-      if (!segment.isInit) {
-        const segmentInfos = isWEBM ?
-          {
-            time: segment.time,
-            duration: segment.duration,
-            timescale: segment.timescale,
-          } :
-          getISOBMFFTimingInfos(segment, segmentData, nextSegments, init);
-        const segmentOffset = segment.timestampOffset || 0;
-        return observableOf({ segmentData, segmentInfos, segmentOffset });
-      }
-
-      if (nextSegments) {
-        addNextSegments(representation, nextSegments);
-      }
-      const timescale = isWEBM ?
-        getTimeCodeScale(segmentData, 0) :
-        getMDHDTimescale(segmentData);
-      return observableOf({
-        segmentData,
-        segmentInfos: timescale && timescale > 0 ?
-          { time: -1, duration: 0, timescale } : null,
-        segmentOffset: segment.timestampOffset || 0,
-      });
-    },
+    loader: segmentLoader,
+    parser: segmentParser,
   };
 
   const textTrackPipeline = {
-    loader: TextTrackLoader,
-    parser: TextTrackParser,
+    loader: textTrackLoader,
+    parser: textTrackParser,
   };
 
   const imageTrackPipeline = {
-    loader(
-      { segment } : ISegmentLoaderArguments
-    ) : ILoaderObservable<ArrayBuffer|null> {
-      if (segment.isInit || segment.mediaURL == null) {
-        return observableOf({
-          type: "data" as "data",
-          value: { responseData: null },
-        });
-      }
-      const { mediaURL } = segment;
-      return request({ url: mediaURL, responseType: "arraybuffer" });
-    },
-
-    parser({
-      response,
-      infos,
-    } : ISegmentParserArguments<Uint8Array|ArrayBuffer|null>
-    ) : ImageParserObservable {
-      const { segment } = infos;
-      const responseData = response.responseData;
-
-      // TODO image Parsing should be more on the sourceBuffer side, no?
-      if (responseData === null || features.imageParser == null) {
-        return observableOf({
-          segmentData: null,
-          segmentInfos: segment.timescale > 0 ? {
-            duration: segment.isInit ? 0 : segment.duration,
-            time: segment.isInit ? -1 : segment.time,
-            timescale: segment.timescale,
-          } : null,
-          segmentOffset: segment.timestampOffset || 0,
-        });
-      }
-
-      const bifObject = features.imageParser(new Uint8Array(responseData));
-      const data = bifObject.thumbs;
-      return observableOf({
-        segmentData: {
-          data,
-          start: 0,
-          end: Number.MAX_VALUE,
-          timescale: 1,
-          type: "bif",
-        },
-        segmentInfos: {
-          time: 0,
-          duration: Number.MAX_VALUE,
-          timescale: bifObject.timescale,
-        },
-        segmentOffset: segment.timestampOffset || 0,
-      });
-    },
+    loader: imageLoader,
+    parser: imageParser,
   };
 
   return {
