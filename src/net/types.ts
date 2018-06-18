@@ -113,18 +113,26 @@ export type ILoaderObservable<T> = Observable<ILoaderEvent<T>>;
 
 // -- arguments
 
-export interface IManifestParserArguments<T> {
-  response : ILoaderResponseValue<T>;
+export interface IManifestInfos {
   url : string|null;
 }
 
-export interface ISegmentParserArguments<T> {
+export interface IManifestParserArguments<T> {
   response : ILoaderResponseValue<T>;
+  infos : IManifestInfos;
+}
+
+export interface ISegmentInfos {
   manifest : Manifest;
   adaptation : Adaptation;
   representation : Representation;
   segment : ISegment;
   init? : ISegmentTimingInfos;
+}
+
+export interface ISegmentParserArguments<T> {
+  response : ILoaderResponseValue<T>;
+  infos : ISegmentInfos;
 }
 
 // -- response

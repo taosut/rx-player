@@ -98,12 +98,15 @@ function TextTrackLoader(
  */
 function TextTrackParser({
   response,
-  segment,
-  adaptation,
-  representation,
-  init,
+  infos,
 } : ISegmentParserArguments<Uint8Array|ArrayBuffer|string|null>
 ) : TextTrackParserObservable {
+  const {
+    segment,
+    adaptation,
+    representation,
+    init,
+  } = infos;
   const { language } = adaptation;
   const { isInit, indexRange } = segment;
 

@@ -40,7 +40,7 @@ export default function parseManifestData(
 ) : Observable<Manifest> {
   return generateParser(transport.manifest)({
     response: { responseData: manifestData },
-    url: null,
+    infos: { url: null },
   }).pipe(
     map((value) => {
       return createManifest(

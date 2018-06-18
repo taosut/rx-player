@@ -152,9 +152,10 @@ export default function createPipeline<T, U, V>(
                 case "cache":
                 case "data":
                 case "response":
-                  const loaderResponse = arg.value;
-                  const parserInput =
-                    objectAssign({ response: loaderResponse }, loaderInput);
+                  const parserInput = objectAssign({
+                    response: arg.value,
+                    infos: loaderInput,
+                  });
 
                   // add metrics if a request was made
                   const metrics : Observable<IPipelineMetrics> =

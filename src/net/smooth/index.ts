@@ -134,8 +134,9 @@ export default function(
     },
 
     parser(
-      { response, url: reqURL } : IManifestParserArguments<Document|string>
+      { response, infos } : IManifestParserArguments<Document|string>
     ) : IManifestParserObservable {
+      const reqURL = infos.url;
       const url = response.url == null ? reqURL : response.url;
       const data = typeof response.responseData === "string" ?
         new DOMParser().parseFromString(response.responseData, "text/xml") :
@@ -166,12 +167,15 @@ export default function(
     },
 
     parser({
-      segment,
       response,
-      adaptation,
-      manifest,
+      infos,
     } : ISegmentParserArguments<ArrayBuffer|Uint8Array|null>
     ) : SegmentParserObservable {
+      const {
+        segment,
+        adaptation,
+        manifest,
+      } = infos;
       const { responseData } = response;
       if (responseData == null) {
         return observableOf({ segmentData: null, segmentInfos: null, segmentOffset: 0 });
@@ -222,13 +226,16 @@ export default function(
     },
 
     parser({
-        response,
+      response,
+      infos,
+    } : ISegmentParserArguments<string|ArrayBuffer|Uint8Array|null>
+    ) : TextTrackParserObservable {
+      const {
         segment,
         representation,
         adaptation,
         manifest,
-    } : ISegmentParserArguments<string|ArrayBuffer|Uint8Array|null>
-    ) : TextTrackParserObservable {
+      } = infos;
       const { language } = adaptation;
       const {
         mimeType = "",
@@ -378,8 +385,9 @@ export default function(
     },
 
     parser(
-      { response, segment } : ISegmentParserArguments<Uint8Array|ArrayBuffer|null>
+      { response, infos } : ISegmentParserArguments<Uint8Array|ArrayBuffer|null>
     ) : ImageParserObservable {
+      const { segment } = infos;
       const responseData = response.responseData;
 
       // TODO image Parsing should be more on the sourceBuffer side, no?
