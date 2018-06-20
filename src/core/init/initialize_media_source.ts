@@ -54,6 +54,7 @@ import {
 } from "../pipelines";
 import {
   IBufferType,
+  IOverlaySourceBufferOptions,
   ITextTrackSourceBufferOptions,
 } from "../source_buffers";
 import createEMEManager, {
@@ -118,10 +119,13 @@ export interface IInitializeOptions {
     offlineRetry? : number;
     segmentRetry? : number;
   };
+  pipelines : ITransportPipelines;
   speed$ : Observable<number>;
   startAt? : IInitialTimeOptions;
-  textTrackOptions : ITextTrackSourceBufferOptions;
-  pipelines : ITransportPipelines;
+  sourceBufferOptions?: {
+    text?: ITextTrackSourceBufferOptions;
+    overlay?: IOverlaySourceBufferOptions;
+  };
   url : string;
 }
 
@@ -158,7 +162,7 @@ export default function InitializeOnMediaSource({
   networkConfig,
   speed$,
   startAt,
-  textTrackOptions,
+  sourceBufferOptions,
   pipelines,
   url,
 } : IInitializeOptions) : Observable<IInitEvent> {
@@ -237,9 +241,10 @@ export default function InitializeOnMediaSource({
       abrManager,
       segmentPipelinesManager,
       bufferOptions: objectAssign({
-        textTrackOptions,
         offlineRetry: networkConfig.offlineRetry,
         segmentRetry: networkConfig.segmentRetry,
+        textTrackOptions: sourceBufferOptions && sourceBufferOptions.text,
+        overlayOptions: sourceBufferOptions && sourceBufferOptions.overlay,
       }, bufferOptions),
     });
 

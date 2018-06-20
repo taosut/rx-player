@@ -147,6 +147,7 @@ export interface ILoadVideoOptions {
   networkConfig? : INetworkConfigOption;
   startAt? : IStartAtOption;
   textTrackMode? : "native"|"html";
+  overlayElement? : HTMLElement;
   hideNativeSubtitle? : boolean;
   textTrackElement? : HTMLElement;
   manualBitrateSwitchingMode? : "seamless"|"direct";
@@ -163,6 +164,7 @@ interface IParsedLoadVideoOptionsBase {
   supplementaryImageTracks : ISupplementaryImageTrackOption[];
   defaultAudioTrack : IDefaultAudioTrackOption|null|undefined;
   defaultTextTrack : IDefaultTextTrackOption|null|undefined;
+  overlayElement? : HTMLElement;
   startAt : IParsedStartAtOption|undefined;
   manualBitrateSwitchingMode : "seamless"|"direct";
 }
@@ -475,6 +477,7 @@ function parseLoadVideoOptions(
     keySystems,
     manualBitrateSwitchingMode,
     networkConfig,
+    overlayElement: options.overlayElement,
     startAt,
     supplementaryImageTracks,
     supplementaryTextTracks,
