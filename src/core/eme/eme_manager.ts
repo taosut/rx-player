@@ -170,7 +170,7 @@ export default function EMEManager(
       } = sessionInfosEvt.value;
 
       return observableMerge(
-        handleSessionEvents(mediaKeySession, keySystemOptions),
+        handleSessionEvents(mediaKeySession, keySystemOptions, initData),
 
         // only perform generate request on new sessions
         sessionInfosEvt.type === "created-session" ?
