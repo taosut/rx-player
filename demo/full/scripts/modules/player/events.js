@@ -90,6 +90,7 @@ const linkPlayerEventsToState = (player, state, $destroy) => {
     } else if (arg === "LOADED") {
       stateUpdates.isPaused = true;
       stateUpdates.isLive = player.isLive();
+      stateUpdates.manifest = player.getManifest();
     } else if (arg === "STOPPED") {
       stateUpdates.audioBitrate = undefined;
       stateUpdates.videoBitrate = undefined;
@@ -103,6 +104,7 @@ const linkPlayerEventsToState = (player, state, $destroy) => {
       stateUpdates.wallClockDiff = undefined;
       stateUpdates.bufferGap = undefined;
       stateUpdates.duration = undefined;
+      stateUpdates.manifest = null;
       stateUpdates.minimumPosition = undefined;
       stateUpdates.maximumPosition = undefined;
     }
@@ -117,11 +119,12 @@ const linkPlayerEventsToState = (player, state, $destroy) => {
 
   fromPlayerEvent("periodChange")
     .pipe(takeUntil($destroy))
-    .subscribe(() => {
+    .subscribe((period) => {
       state.set({
         availableVideoTracks: player.getAvailableVideoTracks(),
         availableLanguages: player.getAvailableAudioTracks(),
         availableSubtitles: player.getAvailableTextTracks(),
+        currentPeriod: period,
       });
     });
 
