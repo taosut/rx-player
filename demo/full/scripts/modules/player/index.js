@@ -39,6 +39,7 @@ const PLAYER = (
     cannotLoadMetadata: false,
     currentTime: undefined,
     duration: undefined,
+    epg: [],
     error: null,
     hasEnded: false,
     hasCurrentContent: false,
@@ -76,6 +77,7 @@ const PLAYER = (
     },
 
     LOAD: (arg) => {
+      state.set({ epg: null });
       if (arg.transport === "bxf") {
         loadBXF(Object.assign({
           textTrackElement,
@@ -87,7 +89,9 @@ const PLAYER = (
             offlineRetry: Infinity,
           },
           manualBitrateSwitchingMode: "direct",
-        }, arg));
+        }, arg)).then((epg) => {
+          state.set({ epg });
+        });
       } else {
         player.loadVideo(Object.assign({
           textTrackElement,
@@ -122,6 +126,7 @@ const PLAYER = (
     },
 
     STOP: () => {
+      state.set({ epg: null });
       player.stop();
     },
 
