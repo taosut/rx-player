@@ -19,6 +19,7 @@
     - [supplementaryImageTracks](#prop-supplementaryImageTracks)
     - [hideNativeSubtitle](#prop-hideNativeSubtitle)
     - [networkConfig](#prop-networkConfig)
+    - [initialManifest](#prop-initialManifest)
 
 
 
@@ -31,7 +32,6 @@ method to use to load a new video.
 These options take the form of a single objects with multiple properties, like
 this:
 ```js
-// Setting the only two mandatory keys for a clear content (without DRM).
 const options = {
   transport: "dash",
   url: myManifestUrl
@@ -67,6 +67,9 @@ Can be either:
     This is documented in the documentation of each concerned method, option or
     event in the API.
 
+  - ``"rxp-manifest"`` - for loading already-downloaded contents through our
+    offline downloader.
+
 This property is mandatory.
 
 
@@ -80,7 +83,10 @@ For Smooth or DASH contents, the URL to the manifest.
 For _DirectFile_ mode contents, the URL of the content (the supported contents
 depends on the current browser).
 
-This property is mandatory.
+If the initial manifest is given through the [initialManifest
+](#prop-initialManifest) option and if this manifest does not need to be
+refreshed (like VOD or downloaded contents), you might not even need to set this
+property.
 
 
 <a name="prop-keySystems"></a>
@@ -659,3 +665,18 @@ following properties (all are optional):
 
   - the request failed because of an unknown XHR error (might be a
     parsing/interface error)
+
+
+<a name="prop-initialManifest"></a>
+### initialManifest ############################################################
+
+_type_: ``*``
+
+_defaults_: ``null``
+
+If you already loaded the concerned manifest, you can give it directly to the
+player through this option. This will avoid an unnecessary supplementary
+request.
+
+This is also used when loading downloaded contents (through the ``rxp-manifest``
+transport), as those contents are not "loadable" through an url.
