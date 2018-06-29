@@ -134,6 +134,7 @@ export interface ILoadVideoOptions {
   transport : string;
 
   autoPlay? : boolean;
+  initialManifest? : any|null;
   keySystems? : IKeySystemOption[];
   transportOptions? : ITransportOptions|undefined;
   supplementaryTextTracks? : ISupplementaryTextTrackOption[];
@@ -151,6 +152,7 @@ interface IParsedLoadVideoOptionsBase {
   url : string;
   transport : string;
   autoPlay : boolean;
+  initialManifest : any|null;
   keySystems : IKeySystemOption[];
   networkConfig: INetworkConfigOption;
   transportOptions : ITransportOptions|undefined;
@@ -472,6 +474,8 @@ function parseLoadVideoOptions(
     defaultAudioTrack,
     defaultTextTrack,
     hideNativeSubtitle,
+    initialManifest: options.initialManifest != null ?
+      options.initialManifest : null,
     keySystems,
     networkConfig,
     startAt,
