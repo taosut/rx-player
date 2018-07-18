@@ -340,7 +340,7 @@ function parseLoadVideoOptions(
   let hideNativeSubtitle : boolean;
   let startAt : IParsedStartAtOption|undefined;
 
-  if (!options || options.url == null) {
+  if (!options || options.url == null && options.initialManifest == null) {
     throw new Error("No url set on loadVideo");
   } else {
     url = String(options.url);
