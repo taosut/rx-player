@@ -26,7 +26,7 @@ const plugins = [
         process.env.RXP_DASH === "true" :
         process.env.RXP_DASH !== "false",
 
-      RXPMANIFEST: isBarebone ?
+      RXP_MANIFEST: isBarebone ?
         process.env.RXP_RXPMANIFEST === "true" :
         process.env.RXP_RXPMANIFEST !== "false",
 
@@ -82,7 +82,7 @@ const plugins = [
       BIF_PARSER: JSON.stringify("../parsers/images/bif.ts"),
       SMOOTH: JSON.stringify("../net/smooth/index.ts"),
       DASH: JSON.stringify("../net/dash/index.ts"),
-      RXPMANIFEST: JSON.stringify("../net/rxp-manifest/index.ts"),
+      RXP_MANIFEST: JSON.stringify("../net/rxp-manifest/index.ts"),
       NATIVE_TEXT_BUFFER: JSON.stringify("../core/source_buffers/text/native/index.ts"),
       NATIVE_VTT: JSON.stringify("../parsers/texttracks/webvtt/native.ts"),
       NATIVE_SRT: JSON.stringify("../parsers/texttracks/srt/native.ts"),

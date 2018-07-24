@@ -22,6 +22,7 @@ for f in "$files"; do
   sed -i -E "s/\b__FEATURES__\.EME\b/false/g" $f
   sed -i -E "s/\b__FEATURES__\.SMOOTH\b/false/g" $f
   sed -i -E "s/\b__FEATURES__\.DASH\b/false/g" $f
+  sed -i -E "s/\b__FEATURES__\.RXP_MANIFEST\b/false/g" $f
   sed -i -E "s/\b__FEATURES__\.DIRECTFILE\b/false/g" $f
   sed -i -E "s/\b__FEATURES__\.HTML_SAMI\b/false/g" $f
   sed -i -E "s/\b__FEATURES__\.HTML_SRT\b/false/g" $f
@@ -38,6 +39,7 @@ for f in "$files"; do
   sed -i -E "s/\b__RELATIVE_PATH__\.BIF_PARSER\b/\"..\/parsers\/images\/bif.js\"/g" $f
   sed -i -E "s/\b__RELATIVE_PATH__\.SMOOTH\b/\"..\/net\/smooth\/index.js\"/g" $f
   sed -i -E "s/\b__RELATIVE_PATH__\.DASH\b/\"..\/net\/dash\/index.js\"/g" $f
+  sed -i -E "s/\b__RELATIVE_PATH__\.RXP_MANIFEST\b/\"..\/net\/rxp-manifest\/index.js\"/g" $f
   sed -i -E "s/\b__RELATIVE_PATH__\.NATIVE_TEXT_BUFFER\b/\"..\/core\/source_buffers\/text\/native\/index.js\"/g" $f
   sed -i -E "s/\b__RELATIVE_PATH__\.NATIVE_VTT\b/\"..\/parsers\/texttracks\/webvtt\/native.js\"/g" $f
   sed -i -E "s/\b__RELATIVE_PATH__\.NATIVE_SRT\b/\"..\/parsers\/texttracks\/srt\/native.js\"/g" $f

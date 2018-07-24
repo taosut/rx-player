@@ -29,5 +29,5 @@ export { NATIVE_SRT_PARSER } from "./native_srt_parser";
 export { NATIVE_TEXT_BUFFER } from "./native_text_buffer";
 export { NATIVE_TTML_PARSER } from "./native_ttml_parser";
 export { NATIVE_VTT_PARSER } from "./native_vtt_parser";
-export { RXPMANIFEST } from "./rxp_manifest";
+export { RXP_MANIFEST } from "./rxp_manifest";
 export { SMOOTH } from "./smooth";

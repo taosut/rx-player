@@ -18,12 +18,12 @@ import rxpmanifest from "../../net/rxp-manifest";
 import { IFeaturesObject } from "../types";
 
 /**
- * Add ability to parse WebVTT text tracks in a native textrack mode.
+ * Add ability to play RXP-Manifest contents.
  * @param {Object} features
  */
 function addRxpManifestFeature(features : IFeaturesObject) {
-  features.transports.rxpmanifest = rxpmanifest;
+  features.transports["rxp-manifest"] = rxpmanifest;
 }
 
-export { addRxpManifestFeature as RXPMANIFEST };
+export { addRxpManifestFeature as RXP_MANIFEST };
 export default addRxpManifestFeature;

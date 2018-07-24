@@ -20,7 +20,7 @@ declare const __LOGGER_LEVEL__: string;
 declare const __FEATURES__ : {
   SMOOTH : boolean;
   DASH : boolean;
-  RXPMANIFEST : boolean;
+  RXP_MANIFEST : boolean;
   DIRECTFILE : boolean;
   HTML_SAMI : boolean;
   HTML_SRT : boolean;
@@ -39,7 +39,7 @@ declare const __RELATIVE_PATH__ : {
   BIF_PARSER: string;
   SMOOTH: string;
   DASH: string;
-  RXPMANIFEST: string;
+  RXP_MANIFEST: string;
   NATIVE_TEXT_BUFFER: string;
   NATIVE_VTT: string;
   NATIVE_SRT: string;
