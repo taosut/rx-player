@@ -50,8 +50,8 @@ export default function loadSegment(
      */
     const resolve = (_args : {
       data : ArrayBuffer|Uint8Array;
-      size : number;
-      duration : number;
+      size? : number;
+      duration? : number;
     }) => {
       hasFinished = true;
       obs.next({
