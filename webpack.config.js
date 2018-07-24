@@ -29,7 +29,7 @@ const plugins = [
       RXPMANIFEST: isBarebone ?
         process.env.RXP_RXPMANIFEST === "true" :
         process.env.RXP_RXPMANIFEST !== "false",
-        
+
       DIRECTFILE: isBarebone ?
         process.env.RXP_DIRECTFILE === "true" :
         process.env.RXP_DIRECTFILE !== "false",
