@@ -676,6 +676,7 @@ class Player extends EventEmitter<PLAYER_EVENT_STRINGS, any> {
       transport,
       transportOptions,
       url,
+      abrToleranceOptions,
     } = options;
 
     // Perform multiple checks on the given options
@@ -742,6 +743,10 @@ class Player extends EventEmitter<PLAYER_EVENT_STRINGS, any> {
         limitWidth: this._priv_limitVideoWidth ? {
           video: videoWidth$(videoElement)
             .pipe(takeUntil(this._priv_stopCurrentContent$)),
+        } : {},
+        abrToleranceOptions: abrToleranceOptions ? {
+          audio: abrToleranceOptions,
+          video: abrToleranceOptions,
         } : {},
       };
 

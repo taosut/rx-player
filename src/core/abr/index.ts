@@ -25,6 +25,7 @@ import {
 import { Representation } from "../../manifest";
 import { IBufferType } from "../source_buffers";
 import RepresentationChooser, {
+  IABRToleranceOptions,
   IRepresentationChooserClockTick,
   IRequest,
 } from "./representation_chooser";
@@ -48,6 +49,7 @@ interface IRepresentationChoosersOptions {
   initialBitrates: Partial<Record<IBufferType, number>>;
   manualBitrates: Partial<Record<IBufferType, number>>;
   maxAutoBitrates: Partial<Record<IBufferType, number>>;
+  abrToleranceOptions: Partial<Record<IBufferType, IABRToleranceOptions>>;
 }
 
 const defaultChooserOptions = {
@@ -56,6 +58,7 @@ const defaultChooserOptions = {
   initialBitrates: {},
   manualBitrates: {},
   maxAutoBitrates: {},
+  abrToleranceOptions: {},
 };
 
 /**
@@ -74,6 +77,7 @@ const createChooser = (
     initialBitrate: options.initialBitrates[type],
     manualBitrate: options.manualBitrates[type],
     maxAutoBitrate: options.maxAutoBitrates[type],
+    abrToleranceOptions: options.abrToleranceOptions[type],
   });
 };
 
@@ -175,6 +179,7 @@ export default class ABRManager {
       maxAutoBitrates: options.maxAutoBitrates || {},
       throttle: options.throttle || {},
       limitWidth: options.limitWidth || {},
+      abrToleranceOptions: options.abrToleranceOptions || {},
     };
 
     metrics$
@@ -329,6 +334,7 @@ export default class ABRManager {
 }
 
 export {
+  IABRToleranceOptions,
   IRequest as IABRRequest,
   IMetric as IABRMetric,
   IRepresentationChoosersOptions as IABROptions,

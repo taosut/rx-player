@@ -145,6 +145,12 @@ export interface ILoadVideoOptions {
   textTrackMode? : "native"|"html";
   hideNativeSubtitle? : boolean;
   textTrackElement? : HTMLElement;
+  abrToleranceOptions? : IABRToleranceOptions;
+}
+
+interface IABRToleranceOptions {
+  shouldBeSmooth: boolean;
+  shouldBePowerEfficient: boolean;
 }
 
 interface IParsedLoadVideoOptionsBase {
@@ -159,6 +165,7 @@ interface IParsedLoadVideoOptionsBase {
   defaultAudioTrack : IDefaultAudioTrackOption|null|undefined;
   defaultTextTrack : IDefaultTextTrackOption|null|undefined;
   startAt : IParsedStartAtOption|undefined;
+  abrToleranceOptions : IABRToleranceOptions|undefined;
 }
 
 interface IParsedLoadVideoOptionsNative extends IParsedLoadVideoOptionsBase {
@@ -337,6 +344,7 @@ function parseLoadVideoOptions(
   let defaultTextTrack : IDefaultTextTrackOption|null|undefined;
   let hideNativeSubtitle : boolean;
   let startAt : IParsedStartAtOption|undefined;
+  let abrToleranceOptions : IABRToleranceOptions|undefined;
 
   if (!options || options.url == null) {
     throw new Error("No url set on loadVideo");
@@ -459,6 +467,15 @@ function parseLoadVideoOptions(
     }
   }
 
+  if (options.abrToleranceOptions) {
+    abrToleranceOptions = options.abrToleranceOptions;
+  } else {
+    abrToleranceOptions = {
+      shouldBeSmooth: false,
+      shouldBePowerEfficient: false,
+    };
+  }
+
   const networkConfig = options.networkConfig == null ? {} : {
     manifestRetry: options.networkConfig.manifestRetry,
     offlineRetry: options.networkConfig.offlineRetry,
@@ -482,6 +499,7 @@ function parseLoadVideoOptions(
     transport,
     transportOptions,
     url,
+    abrToleranceOptions,
   } as IParsedLoadVideoOptions;
   /* tslint:enable no-object-literal-type-assertion */
 }
