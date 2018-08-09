@@ -47,8 +47,10 @@ export interface IRepresentationAttributes {
   audioSamplingRate? : string;
   bitrate? : number;
   codecs? : string;
+  channels? : number;
   codingDependency? : boolean;
   frameRate? : string;
+  sampleRate? : number;
   height? : number;
   id? : string;
   maxPlayoutRate? : number;
@@ -132,6 +134,12 @@ function parseRepresentationAttributes(
       case "frameRate":
         attributes.frameRate = attribute.value;
         break;
+
+      case "sampleRate":
+        attributes.sampleRate = parseInt(attribute.value, 10);
+
+      case "numChannels":
+        attributes.channels = parseInt(attribute.value, 10);
 
       case "height": {
         const height = parseInt(attribute.value, 10);

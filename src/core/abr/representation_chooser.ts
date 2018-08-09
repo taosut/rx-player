@@ -24,6 +24,7 @@ import {
 } from "rxjs";
 import {
   map,
+  mergeMap,
   shareReplay,
   switchMap,
   takeUntil,
@@ -36,6 +37,7 @@ import { IBufferType } from "../source_buffers";
 import BandwidthEstimator from "./bandwidth_estimator";
 import EWMA from "./ewma";
 import filterByBitrate from "./filterByBitrate";
+import getDecodableRepresentations from "./filterByDecodingCapabilities";
 import filterByWidth from "./filterByWidth";
 import fromBitrateCeil from "./fromBitrateCeil";
 
@@ -346,7 +348,8 @@ export default class RepresentationChooser {
    */
   public get$(
     clock$ : Observable<IRepresentationChooserClockTick>,
-    representations : Representation[]
+    representations : Representation[],
+    type : string
   ) : Observable<{
     bitrate: undefined|number; // bitrate estimation
     representation: Representation|null; // chosen representation
@@ -408,69 +411,86 @@ export default class RepresentationChooser {
       let inStarvationMode = false; // == buffer gap too low == panic mode
       return observableCombineLatest(clock$, maxAutoBitrate$, deviceEvents$)
         .pipe(
-          map(([ clock, maxAutoBitrate, deviceEvents ]) => {
-            let nextBitrate;
-            let bandwidthEstimate;
-            const { bufferGap } = clock;
-
-            // check if should get in/out of starvation mode
-            if (!inStarvationMode && bufferGap <= ABR_STARVATION_GAP) {
-              log.info("ABR - enter starvation mode.");
-              inStarvationMode = true;
-            } else if (inStarvationMode && bufferGap >= OUT_OF_STARVATION_GAP) {
-              log.info("ABR - exit starvation mode.");
-              inStarvationMode = false;
-            }
-
-            // If in starvation mode, check if a quick new estimate can be done
-            // from the last requests.
-            // If so, cancel previous estimations and replace it by the new one
-            if (inStarvationMode) {
-              bandwidthEstimate = estimateStarvationModeBitrate(
-                this._currentRequests, clock, lastEstimatedBitrate);
-
-              if (bandwidthEstimate != null) {
-                log.info("ABR - starvation mode emergency estimate:", bandwidthEstimate);
-                this.resetEstimate();
-                const currentBitrate = clock.bitrate;
-                nextBitrate = currentBitrate == null ?
-                  Math.min(bandwidthEstimate, maxAutoBitrate) :
-                  Math.min(bandwidthEstimate, maxAutoBitrate, currentBitrate);
+          mergeMap(([ clock, maxAutoBitrate, deviceEvents ]) => {
+            return getDecodableRepresentations(
+              representations,
+              type,
+              {
+                shouldBeSmooth: false,
+                shouldBePowerEfficient: false,
               }
-            }
+            ).pipe(
+              map((decodableRepresentations) => {
+                let nextBitrate;
+                let bandwidthEstimate;
+                const { bufferGap } = clock;
 
-            // if nextBitrate is not yet defined, do the normal estimation
-            if (nextBitrate == null) {
-              bandwidthEstimate = this.estimator.getEstimate();
+                // check if should get in/out of starvation mode
+                if (!inStarvationMode && bufferGap <= ABR_STARVATION_GAP) {
+                  log.info("ABR - enter starvation mode.");
+                  inStarvationMode = true;
+                } else if (inStarvationMode && bufferGap >= OUT_OF_STARVATION_GAP) {
+                  log.info("ABR - exit starvation mode.");
+                  inStarvationMode = false;
+                }
 
-              let nextEstimate;
-              if (bandwidthEstimate != null) {
-                nextEstimate = inStarvationMode ?
-                  bandwidthEstimate * ABR_STARVATION_FACTOR :
-                  bandwidthEstimate * ABR_REGULAR_FACTOR;
-              } else if (lastEstimatedBitrate != null) {
-                nextEstimate = inStarvationMode ?
-                  lastEstimatedBitrate * ABR_STARVATION_FACTOR :
-                  lastEstimatedBitrate * ABR_REGULAR_FACTOR;
-              } else {
-                nextEstimate = _initialBitrate;
-              }
-              nextBitrate = Math.min(nextEstimate, maxAutoBitrate);
-            }
+                // If in starvation mode, check if a quick new estimate can be done
+                // from the last requests.
+                // If so, cancel previous estimations and replace it by the new one
+                if (inStarvationMode) {
+                  bandwidthEstimate = estimateStarvationModeBitrate(
+                    this._currentRequests, clock, lastEstimatedBitrate);
 
-            if (clock.speed > 1) {
-              nextBitrate /= clock.speed;
-            }
+                  if (bandwidthEstimate != null) {
+                    log.info(
+                      "ABR - starvation mode emergency estimate:", bandwidthEstimate);
+                    this.resetEstimate();
+                    const currentBitrate = clock.bitrate;
+                    nextBitrate = currentBitrate == null ?
+                      Math.min(bandwidthEstimate, maxAutoBitrate) :
+                      Math.min(bandwidthEstimate, maxAutoBitrate, currentBitrate);
+                  }
+                }
 
-            const _representations =
-              getFilteredRepresentations(representations, deviceEvents);
+                // if nextBitrate is not yet defined, do the normal estimation
+                if (nextBitrate == null) {
+                  bandwidthEstimate = this.estimator.getEstimate();
 
-            return {
-              bitrate: bandwidthEstimate,
-              representation: fromBitrateCeil(_representations, nextBitrate) ||
-              representations[0],
-            };
+                  let nextEstimate;
+                  if (bandwidthEstimate != null) {
+                    nextEstimate = inStarvationMode ?
+                      bandwidthEstimate * ABR_STARVATION_FACTOR :
+                      bandwidthEstimate * ABR_REGULAR_FACTOR;
+                  } else if (lastEstimatedBitrate != null) {
+                    nextEstimate = inStarvationMode ?
+                      lastEstimatedBitrate * ABR_STARVATION_FACTOR :
+                      lastEstimatedBitrate * ABR_REGULAR_FACTOR;
+                  } else {
+                    nextEstimate = _initialBitrate;
+                  }
+                  nextBitrate = Math.min(nextEstimate, maxAutoBitrate);
+                }
 
+                if (clock.speed > 1) {
+                  nextBitrate /= clock.speed;
+                }
+
+                const _representations =
+                  getFilteredRepresentations(
+                    // If no representation is considered decodable,
+                    // ignore decoding capabilities
+                    decodableRepresentations.length > 0 ?
+                      decodableRepresentations :
+                      representations,
+                    deviceEvents);
+
+                return {
+                  bitrate: bandwidthEstimate,
+                  representation: fromBitrateCeil(_representations, nextBitrate) ||
+                  representations[0],
+                };
+              })
+            );
           }),
 
           tap(({ bitrate }) => {

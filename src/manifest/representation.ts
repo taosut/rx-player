@@ -28,6 +28,8 @@ export interface IRepresentationArguments {
   index : IRepresentationIndex;
 
   // -- optional
+  channels? : number;
+  sampleRate? : number;
   frameRate? : string;
   codecs? : string;
   height? : number;
@@ -48,6 +50,8 @@ class Representation {
   public bitrate : number;
 
   // opt readonly onal
+  public sampleRate? : number;
+  public channels? : number;
   public frameRate? : string;
   public codec? : string;
   public height? : number;
@@ -83,6 +87,14 @@ class Representation {
 
     if (args.frameRate) {
       this.frameRate = args.frameRate;
+    }
+
+    if (args.sampleRate) {
+      this.sampleRate = args.sampleRate;
+    }
+
+    if (args.channels) {
+      this.channels = args.channels;
     }
 
     this.index = args.index;

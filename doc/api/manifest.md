@@ -307,6 +307,25 @@ _type_: ``Number|undefined``
 This property makes the most sense for video representations.
 It defines the width of the video, in pixels.
 
+#### framerate
+
+_type_: ``String|undefined``
+
+This property is the video frame rate, in frames per second.
+It is expressed as a whole number, or a ratio.
+
+#### samplerate
+
+_type_: ``Number|undefined``
+
+This property is the audio sample rate, in samples per second.
+
+#### channels
+
+_type_: ``Number|undefined``
+
+This property is the audio channels number.
+
 #### index
 
 _type_: ``RepresentationIndex``
