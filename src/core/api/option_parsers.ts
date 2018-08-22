@@ -143,12 +143,10 @@ export interface ILoadVideoOptions {
   networkConfig? : INetworkConfigOption;
   startAt? : IStartAtOption;
   textTrackMode? : "native"|"html";
-  hideNativeSubtitle? : boolean;
-  textTrackElement? : HTMLElement;
-  abrToleranceOptions? : IABRToleranceOptions;
+  playbackQualityRequirements? : IPlaybackQualityRequirements;
 }
 
-interface IABRToleranceOptions {
+interface IPlaybackQualityRequirements {
   shouldBeSmooth: boolean;
   shouldBePowerEfficient: boolean;
 }
@@ -165,7 +163,7 @@ interface IParsedLoadVideoOptionsBase {
   defaultAudioTrack : IDefaultAudioTrackOption|null|undefined;
   defaultTextTrack : IDefaultTextTrackOption|null|undefined;
   startAt : IParsedStartAtOption|undefined;
-  abrToleranceOptions : IABRToleranceOptions|undefined;
+  playbackQualityRequirements : IPlaybackQualityRequirements|undefined;
 }
 
 interface IParsedLoadVideoOptionsNative extends IParsedLoadVideoOptionsBase {
@@ -344,7 +342,7 @@ function parseLoadVideoOptions(
   let defaultTextTrack : IDefaultTextTrackOption|null|undefined;
   let hideNativeSubtitle : boolean;
   let startAt : IParsedStartAtOption|undefined;
-  let abrToleranceOptions : IABRToleranceOptions|undefined;
+  let playbackQualityRequirements : IPlaybackQualityRequirements|undefined;
 
   if (!options || options.url == null) {
     throw new Error("No url set on loadVideo");
@@ -467,13 +465,8 @@ function parseLoadVideoOptions(
     }
   }
 
-  if (options.abrToleranceOptions) {
-    abrToleranceOptions = options.abrToleranceOptions;
-  } else {
-    abrToleranceOptions = {
-      shouldBeSmooth: false,
-      shouldBePowerEfficient: false,
-    };
+  if (options.playbackQualityRequirements) {
+    playbackQualityRequirements = options.playbackQualityRequirements;
   }
 
   const networkConfig = options.networkConfig == null ? {} : {
@@ -499,7 +492,7 @@ function parseLoadVideoOptions(
     transport,
     transportOptions,
     url,
-    abrToleranceOptions,
+    playbackQualityRequirements,
   } as IParsedLoadVideoOptions;
   /* tslint:enable no-object-literal-type-assertion */
 }

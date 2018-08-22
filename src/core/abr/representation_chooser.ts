@@ -108,10 +108,10 @@ interface IRepresentationChooserOptions {
   initialBitrate?: number;
   manualBitrate?: number;
   maxAutoBitrate?: number;
-  abrToleranceOptions?: IABRToleranceOptions;
+  playbackQualityRequirements?: IPlaybackQualityRequirements;
 }
 
-export interface IABRToleranceOptions {
+export interface IPlaybackQualityRequirements {
   shouldBeSmooth: boolean;
   shouldBePowerEfficient: boolean;
 }
@@ -321,7 +321,7 @@ export default class RepresentationChooser {
   private readonly estimator : BandwidthEstimator;
   private readonly _initialBitrate : number;
   private _currentRequests : Partial<Record<string, IRequestInfo>>;
-  private _abrToleranceOptions? : IABRToleranceOptions;
+  private _playbackQualityRequirements? : IPlaybackQualityRequirements;
 
   /**
    * @param {Object} options
@@ -346,7 +346,7 @@ export default class RepresentationChooser {
 
     this._limitWidth$ = options.limitWidth$;
     this._throttle$ = options.throttle$;
-    this._abrToleranceOptions = options.abrToleranceOptions;
+    this._playbackQualityRequirements = options.playbackQualityRequirements;
   }
 
   /**
@@ -423,10 +423,7 @@ export default class RepresentationChooser {
             return getDecodableRepresentations(
               representations,
               type,
-              this._abrToleranceOptions || {
-                shouldBeSmooth: false,
-                shouldBePowerEfficient: false,
-              }
+              this._playbackQualityRequirements
             ).pipe(
               map((decodableRepresentations) => {
                 let nextBitrate;

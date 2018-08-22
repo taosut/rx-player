@@ -165,15 +165,20 @@ function getMediaConfigurationFromRepresentation(
 export default function getDecodableRepresentations(
     representations: Representation[],
     adaptationType: string,
-    options: {
+    options?: {
       shouldBeSmooth: boolean;
       shouldBePowerEfficient: boolean;
     }
   ): Observable<Representation[]> {
+    if (!options) {
+      return observableOf(representations);
+    }
+
     const {
       shouldBeSmooth,
       shouldBePowerEfficient,
     } = options;
+
     if (!shouldBeSmooth && !shouldBePowerEfficient) {
       return observableOf(representations);
     }
