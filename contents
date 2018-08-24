@@ -1,0 +1,60 @@
+DASH LIVE
+http://194.4.235.2/live/RAMDISK/SME_FULL/DASH_SME/SME_FULL.mpd
+
+DASH SegmentBase + langues + sous-titres
+http://dash-vod-aka-test.canal-bis.com/multicodec/index.mpd
+
+DASH Live c8 timeline
+http://194.4.235.2/live/disk/c8-hd/dash_aac_1080p50/c8-hd.mpd
+
+DASH multicodec multi-languages multi-subtitles SegmentBase
+https://storage.googleapis.com/shaka-demo-assets/angel-one/dash.mpd
+
+DASH sintel AVC 4K + VP9 4k SegmentBase
+https://storage.googleapis.com/shaka-demo-assets/sintel/dash.mpd
+
+DASH sintel VP9 4K SegmentBase
+https://storage.googleapis.com/shaka-demo-assets/sintel-webm-only/dash.mpd
+
+DASH sintel AVC 4K SegmentBase
+https://storage.googleapis.com/shaka-demo-assets/sintel-mp4-only/dash.mpd
+
+DASH sintel AVC VP9 + VTT in MP4
+https://storage.googleapis.com/shaka-demo-assets/sintel-mp4-wvtt/dash.mpd
+
+DASH multiperiods+xlink AVC+MP4
+https://storage.googleapis.com/shaka-demo-assets/heliocentrism-xlink/heliocentrism.mpd
+
+DASH audio only
+https://storage.googleapis.com/shaka-demo-assets/dig-the-uke-clear/dash.mpd
+
+DASH TTML
+https://storage.googleapis.com/shaka-demo-assets/tos-ttml/dash.mpd
+
+DASH Live segmentTimeline
+https://storage.googleapis.com/shaka-live-assets/player-source.mpd
+
+DASH MultiPeriods 2min
+https://download.tsi.telecom-paristech.fr/gpac/DASH_CONFORMANCE/TelecomParisTech/mp4-live-periods/mp4-live-periods-mpd.mpd
+
+DASH MultiPeriods MultiCodecs 2sec
+https://storage.googleapis.com/shaka-demo-assets/heliocentrism/heliocentrism.mpd
+
+DASH MultiPeriods MultiCodecs 12min
+https://media.axprod.net/TestVectors/v7-Clear/Manifest_MultiPeriod.mpd
+
+http://webtv-tools.canal-bis.com:8084/jeudi.bxf
+http://webtv-tools.canal-bis.com:8084/vendredi.bxf
+http://webtv-tools.canal-bis.com:8084/samedi.bxf
+http://webtv-tools.canal-bis.com:8084/lundi.bxf
+
+http://localhost:8080/http://95.81.169.114:81/inventory-dash-timeline/bbc/manifest.mpd?zoneid=audience1
+
+http://localhost:8080/http://95.81.169.114:81/inventory-dash-timeline/bbc/manifest.mpd?zoneid=audience1
+http://localhost:8080/http://95.81.169.114:81/inventory-dash-timeline/bbc/manifest.mpd?zoneid=audience2
+http://localhost:8080/http://95.81.169.114:81/inventory-dash-index/bbc/manifest.mpd?zoneid=audience1
+http://localhost:8080/http://95.81.169.114:81/inventory-dash-index/bbc/manifest.mpd?zoneid=audience2
+
+http://127.0.0.1:3005/multi-video-tracks.mpd
+
+http://developers.canal-plus.com/rx-player/multi-video-tracks.mpd
