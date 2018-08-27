@@ -412,6 +412,8 @@ export default class RepresentationChooser {
     return manualBitrate$.pipe(switchMap(manualBitrate => {
       if (manualBitrate >= 0) {
         // -- MANUAL mode --
+        getDecodableRepresentations(
+          representations, type, this._playbackQualityRequirements);
         return setManualRepresentation(representations, manualBitrate);
       }
 
@@ -484,7 +486,7 @@ export default class RepresentationChooser {
                   getFilteredRepresentations(
                     // If no representation is considered decodable,
                     // ignore decoding capabilities
-                    decodableRepresentations.length > 0 ?
+                    (decodableRepresentations.length > 0 && !inStarvationMode) ?
                       decodableRepresentations :
                       representations,
                     deviceEvents);
@@ -492,7 +494,8 @@ export default class RepresentationChooser {
                 return {
                   bitrate: bandwidthEstimate,
                   representation: fromBitrateCeil(_representations, nextBitrate) ||
-                  representations[0],
+                    (!inStarvationMode ?
+                      decodableRepresentations[0] : representations[0]),
                 };
               })
             );

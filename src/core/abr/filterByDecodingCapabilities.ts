@@ -41,17 +41,11 @@ export interface IAudioConfiguration {
   sampleRate: number;
 }
 
-type IMediaConfiguration = {
+interface IMediaConfiguration {
   type: "media-source"|"file";
-  video: IVideoConfiguration;
-} | {
-  type: "media-source"|"file";
-  audio: IAudioConfiguration;
-} | {
-  type: "media-source"|"file";
-  video: IVideoConfiguration;
-  audio: IAudioConfiguration;
-};
+  video?: IVideoConfiguration;
+  audio?: IAudioConfiguration;
+}
 
 interface IDecodingInfos {
   supported: boolean;
@@ -99,8 +93,8 @@ function getDecodingInfos(
 function getMediaConfigurationFromRepresentation(
   representation: Representation,
   type: string
-): IMediaConfiguration|null {
-  let mediaConfiguration: IMediaConfiguration|null = null;
+): IAudioConfiguration|IVideoConfiguration|null {
+  let mediaConfiguration: IAudioConfiguration|IVideoConfiguration|null = null;
   const contentType = representation.getMimeTypeString();
   if (type === "video") {
     const {
@@ -115,14 +109,11 @@ function getMediaConfigurationFromRepresentation(
       frameRate != null
     ) {
       mediaConfiguration = {
-        type: "media-source",
-        video: {
-          contentType,
-          width,
-          height,
-          bitrate,
-          framerate: frameRate,
-        },
+        contentType,
+        width,
+        height,
+        bitrate,
+        framerate: frameRate,
       };
     }
   } else if (type === "audio") {
@@ -136,18 +127,18 @@ function getMediaConfigurationFromRepresentation(
       channels != null
     ) {
       mediaConfiguration = {
-        type: "media-source",
-        audio: {
-          contentType,
-          sampleRate,
-          bitrate,
-          channels,
-        },
+        contentType,
+        sampleRate,
+        bitrate,
+        channels,
       };
     }
   }
   return mediaConfiguration;
 }
+
+let lastVideoConfiguration: IVideoConfiguration|undefined;
+let lastAudioConfiguration: IAudioConfiguration|undefined;
 
 /**
  *
@@ -183,43 +174,80 @@ export default function getDecodableRepresentations(
       return observableOf(representations);
     }
     const decodingsInfos$ = representations.map((representation) => {
-      const mediaConfiguration = getMediaConfigurationFromRepresentation(
+      const configuration = getMediaConfigurationFromRepresentation(
         representation,
         adaptationType
       );
 
-      return (mediaConfiguration !== null) ?
-        getDecodingInfos(mediaConfiguration)
+      if (configuration !== null) {
+        if (adaptationType === "video") {
+          lastVideoConfiguration = configuration as IVideoConfiguration;
+        } else if (adaptationType === "audio") {
+          lastAudioConfiguration = configuration as IAudioConfiguration;
+        }
+
+        const mediaConfiguration = {
+          type: "media-source" as "media-source",
+          video: lastVideoConfiguration,
+          audio: lastAudioConfiguration,
+        };
+
+        /**
+         * Check that video OR audio configurations are present
+         * in mediaConfiguration.
+         * @param {Object} _mediaConfiguration
+         * @returns {boolean}
+         */
+        function configurationHasEnoughStreamInfos(
+          _mediaConfiguration: IMediaConfiguration
+        ): boolean {
+          const { video, audio } = _mediaConfiguration;
+          return !(video === undefined && audio === undefined);
+        }
+
+        if (configurationHasEnoughStreamInfos(mediaConfiguration)) {
+          return getDecodingInfos(mediaConfiguration)
           .pipe(
             tap(() => log.debug(
               "got decoding infos for representation", representation.id)),
             map(({ smooth, powerEfficient }) => {
               return {
+                mediaConfiguration,
                 representation,
                 smooth,
                 powerEfficient,
               };
             })
-          ) :
-          observableOf({
+          );
+        } else {
+          return observableOf({
+            mediaConfiguration,
             representation,
             smooth: true,
             powerEfficient: true,
           });
+        }
+      } else {
+        return observableOf({
+          representation,
+          smooth: true,
+          powerEfficient: true,
+        });
       }
-    );
+    }
+  );
 
-      return observableCombineLatest(decodingsInfos$)
-        .pipe(
-          map((list) => {
-            return list
-              .filter(({ smooth, powerEfficient }) => {
-                return (
-                  (shouldBeSmooth ? smooth : true) &&
-                  (shouldBePowerEfficient ? powerEfficient : true)
-                );
-              })
-              .map(({ representation }) => representation);
+  return observableCombineLatest(decodingsInfos$)
+    .pipe(
+      map((list) => {
+        return list
+          .filter(({ smooth, powerEfficient }) => {
+            return (
+              (shouldBeSmooth ? smooth : true) &&
+              (shouldBePowerEfficient ? powerEfficient : true)
+            );
           })
-        );
-  }
+          .map(({ representation }) => representation);
+      })
+    );
+}
