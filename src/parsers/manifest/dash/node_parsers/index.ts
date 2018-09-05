@@ -17,7 +17,6 @@
 import config from "../../../../config";
 import log from "../../../../log";
 import { IRepresentationIndex } from "../../../../manifest";
-import arrayIncludes from "../../../../utils/array-includes";
 import generateNewId from "../../../../utils/id";
 import {
   normalize as normalizeLang,
@@ -36,7 +35,6 @@ import {
 } from "../../types";
 import checkManifestIDs from "../../utils/check_manifest_ids";
 import {
-  IScheme,
   isHardOfHearing,
   isVisuallyImpaired,
 } from "../helpers";
@@ -44,128 +42,12 @@ import BaseRepresentationIndex from "../indexes/base";
 import ListRepresentationIndex from "../indexes/list";
 import TemplateRepresentationIndex from "../indexes/template";
 import TimelineRepresentationIndex from "../indexes/timeline";
+import inferAdaptationType from "../infer_adaptation_type";
 import {
   createMPDIntermediateRepresentation,
 } from "./MPD";
 
 import { IRepresentationIntermediateRepresentation } from "./Representation";
-
-const KNOWN_ADAPTATION_TYPES = ["audio", "video", "text", "image"];
-const SUPPORTED_TEXT_TYPES = ["subtitle", "caption"];
-
-/**
- * Infers the type of adaptation from codec and mimetypes found in it.
- *
- * This follows the guidelines defined by the DASH-IF IOP:
- *   - one adaptation set contains a single media type
- *   - The order of verifications are:
- *       1. mimeType
- *       2. Role
- *       3. codec
- *
- * Note: This is based on DASH-IF-IOP-v4.0 with some more freedom.
- * @param {Object} adaptation
- * @returns {string} - "audio"|"video"|"text"|"image"|"metadata"|"unknown"
- */
-function inferAdaptationType(
-  adaptationMimeType : string|null,
-  representationMimeTypes : string[],
-  adaptationCodecs : string|null,
-  representationCodecs : string[],
-  adaptationRole : IScheme|null
-) : string {
-
-  function fromMimeType(
-    mimeType : string,
-    role : IScheme|null
-  ) : string|undefined {
-    const topLevel = mimeType.split("/")[0];
-    if (arrayIncludes(KNOWN_ADAPTATION_TYPES, topLevel)) {
-      return topLevel;
-    }
-
-    if (mimeType === "application/bif") {
-      return "image";
-    }
-
-    if (mimeType === "application/ttml+xml") {
-      return "text";
-    }
-
-    // manage DASH-IF mp4-embedded subtitles and metadata
-    if (mimeType === "application/mp4") {
-      if (role) {
-        if (
-          role.schemeIdUri === "urn:mpeg:dash:role:2011" &&
-          arrayIncludes(SUPPORTED_TEXT_TYPES, role.value)
-        ) {
-          return "text";
-        }
-      }
-      return "metadata";
-    }
-  }
-
-  function fromCodecs(codecs : string) {
-    switch (codecs.substr(0, 3)) {
-      case "avc":
-      case "hev":
-      case "hvc":
-      case "vp8":
-      case "vp9":
-      case "av1":
-        return "video";
-      case "vtt":
-        return "text";
-      case "bif":
-        return "image";
-    }
-
-    switch (codecs.substr(0, 4)) {
-      case "mp4a":
-        return "audio";
-      case "wvtt":
-      case "stpp":
-        return "text";
-    }
-  }
-
-  if (adaptationMimeType != null) {
-    const typeFromMimeType = fromMimeType(adaptationMimeType, adaptationRole);
-    if (typeFromMimeType != null) {
-      return typeFromMimeType;
-    }
-  }
-
-  if (adaptationCodecs != null) {
-    const typeFromCodecs = fromCodecs(adaptationCodecs);
-    if (typeFromCodecs != null) {
-      return typeFromCodecs;
-    }
-  }
-
-  for (let i = 0; i < representationMimeTypes.length; i++) {
-    const representationMimeType = representationMimeTypes[i];
-    if (representationMimeType != null) {
-      const typeFromMimeType = fromMimeType(representationMimeType, adaptationRole);
-      if (typeFromMimeType != null) {
-        return typeFromMimeType;
-      }
-    }
-  }
-
-  for (let i = 0; i < representationCodecs.length; i++) {
-    const codecs = representationCodecs[i];
-    if (codecs != null) {
-      const typeFromMimeType = fromCodecs(codecs);
-      if (typeFromMimeType != null) {
-        return typeFromMimeType;
-      }
-    }
-  }
-
-  return "unknown";
-}
 
 /**
  * Returns "last time of reference" from the adaptation given, considering a
