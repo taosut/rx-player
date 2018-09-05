@@ -69,7 +69,14 @@ export default function inferAdaptationType(
           return "text";
         }
       }
-      return "metadata";
+      // Note: By following the DASH-IF IOP v4.2 we should here infer that it is
+      // a metadata track.
+      // However for resilience reason, we prefer to still check the codec to
+      // ensure we are not talking about another type.
+      // For example, a "application/mp4" mimeType with a "stpp" codec will be
+      // infered to be a "text" AdaptationSet.
+      // TODO Check that it is a good idea, we might want to set a metadata
+      // track with a stpp codec, this is now impossible
     }
   }
 
@@ -129,6 +136,10 @@ export default function inferAdaptationType(
         return typeFromMimeType;
       }
     }
+  }
+
+  if (adaptationMimeType === "application/mp4") {
+    return "metadata";
   }
 
   return "unknown";
