@@ -59,7 +59,7 @@ import SegmentBookkeeper from "./segment_bookkeeper";
 import shouldDownloadSegment from "./segment_filter";
 import {
   IBufferEventAddedSegment,
-  IBufferNeededActions,
+  IBufferRequests,
   IBufferStateActive,
   IBufferStateFull,
   IRepresentationBufferEvent,
@@ -342,8 +342,7 @@ export default function RepresentationBuffer<T>({
     [timing, bufferGoal] : [IRepresentationBufferClockTick, number]
   ) : IBufferCurrentStatus {
     const buffered = queuedSourceBuffer.getBuffered();
-    const neededRange = getWantedRange(
-      period, buffered, timing, bufferGoal, paddings);
+    const neededRange = getWantedRange(period, buffered, timing, bufferGoal, paddings);
     const discontinuity = getCurrentDiscontinuity(content, timing);
     const shouldRefreshManifest = shouldRefreshManifestForRange(content, neededRange);
 
@@ -382,16 +381,12 @@ export default function RepresentationBuffer<T>({
       };
     }
 
-    return {
-      discontinuity,
-      shouldRefreshManifest,
-      state,
-    };
+    return { discontinuity, shouldRefreshManifest, state };
   }
 
   /**
    * Exploit the status given by ``getBufferStatus``:
-   *   - emit needed actions
+   *   - emit needed requests
    *   - mutates the downloadQueue
    *   - start/restart the current BufferQueue
    *   - emit the state of the Buffer
@@ -401,22 +396,14 @@ export default function RepresentationBuffer<T>({
   function handleBufferStatus(
     status : IBufferCurrentStatus
   ) : Observable<IRepresentationBufferStateEvent> {
-    const {
-      discontinuity,
-      shouldRefreshManifest,
-      state,
-    } = status;
+    const { discontinuity, shouldRefreshManifest, state } = status;
 
-    const neededActions =
-      getNeededActions(bufferType, discontinuity, shouldRefreshManifest);
+    const requests = getRequests(bufferType, discontinuity, shouldRefreshManifest);
     const downloadQueueState = updateQueueFromInternalState(state);
 
     return downloadQueueState.type === "idle-buffer" ?
-      observableOf(...neededActions) :
-      observableConcat(
-        observableOf(...neededActions),
-        observableOf(downloadQueueState)
-      );
+      observableOf(...requests) :
+      observableConcat(observableOf(...requests), observableOf(downloadQueueState));
   }
 
   /**
@@ -539,20 +526,20 @@ function shouldRefreshManifestForRange(
  * @param {boolean} shouldRefreshManifest
  * @returns {Array.<Object>}
  */
-function getNeededActions(
+function getRequests(
   bufferType: IBufferType,
   discontinuity : number,
   shouldRefreshManifest : boolean
-) : IBufferNeededActions[] {
-  const neededActions : IBufferNeededActions[] = [];
+) : IBufferRequests[] {
+  const requests : IBufferRequests[] = [];
 
   if (discontinuity > 1) {
-    neededActions.push(EVENTS.discontinuityEncountered(bufferType, discontinuity + 1));
+    requests.push(EVENTS.discontinuityEncountered(bufferType, discontinuity + 1));
   }
 
   if (shouldRefreshManifest) {
-    neededActions.push(EVENTS.needsManifestRefresh(bufferType));
+    requests.push(EVENTS.needsManifestRefresh(bufferType));
   }
 
-  return neededActions;
+  return requests;
 }

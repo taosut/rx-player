@@ -53,7 +53,7 @@ export interface IBufferNeedsDiscontinuitySeek {
 }
 
 // Events communicating about actions that need to be taken
-export type IBufferNeededActions =
+export type IBufferRequests =
   IBufferNeedsManifestRefresh |
   IBufferNeedsDiscontinuitySeek;
 
@@ -75,7 +75,7 @@ export interface IBufferStateFull {
 
 // State emitted when the buffer waits
 export type IRepresentationBufferStateEvent =
-  IBufferNeededActions |
+  IBufferRequests |
   IBufferStateFull |
   IBufferStateActive;
 
