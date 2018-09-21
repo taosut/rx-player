@@ -130,7 +130,8 @@ export default function PeriodBufferManager(
     segmentRetry? : number;
     offlineRetry? : number;
     textTrackOptions? : ITextTrackSourceBufferOptions;
-  }
+  },
+  videoElement: HTMLMediaElement
 ) : Observable<IPeriodBufferManagerEvent> {
   const { manifest, initialPeriod } = content;
 
@@ -162,7 +163,7 @@ export default function PeriodBufferManager(
    */
   const segmentBookkeepers =
     new WeakMapMemory<QueuedSourceBuffer<unknown>, SegmentBookkeeper>(() =>
-      new SegmentBookkeeper()
+      new SegmentBookkeeper(videoElement)
     );
 
   const addPeriodBuffer$ = new Subject<IPeriodBufferInfos>();

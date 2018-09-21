@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { Observable } from "rxjs";
 import config from "../../config";
 import log from "../../log";
 import {
@@ -24,6 +25,7 @@ import {
 } from "../../manifest";
 import { convertToRanges } from "../../utils/ranges";
 import takeFirstSet from "../../utils/takeFirstSet";
+import getQualityChanges from "./getQualityChanges";
 
 const {
   MAX_TIME_MISSING_FROM_COMPLETE_SEGMENT,
@@ -56,8 +58,9 @@ interface IBufferedSegment {
  */
 export default class SegmentBookkeeper {
   public inventory : IBufferedSegment[];
+  private _videoElement : HTMLMediaElement;
 
-  constructor() {
+  constructor(videoElement: HTMLMediaElement) {
     /**
      * The inventory keep track of all the segments which should be currently
      * in the browser's memory.
@@ -66,6 +69,7 @@ export default class SegmentBookkeeper {
      * @type {Array.<Object>}
      */
     this.inventory = [];
+    this._videoElement = videoElement;
   }
 
   /**
@@ -75,7 +79,7 @@ export default class SegmentBookkeeper {
    *
    * TODO implement management of segments whose end is not known
    */
-  public synchronizeBuffered(buffered : TimeRanges) : void {
+  public synchronizeBuffered(buffered : TimeRanges) : Observable<any>|void {
     const { inventory } = this;
     const ranges = convertToRanges(buffered);
 
@@ -248,6 +252,37 @@ export default class SegmentBookkeeper {
     if (thisSegment) {
       inventory.splice(inventoryIndex, inventory.length - inventoryIndex);
     }
+
+    const timeline =
+      this.inventory.reduce((acc: IBufferedSegment[], val) => {
+        const lastElement = acc[acc.length - 1];
+        if (lastElement) {
+          const { infos } = lastElement;
+          if (
+            infos.representation.id === val.infos.representation.id &&
+            infos.adaptation.id === val.infos.adaptation.id
+          ) {
+            acc[acc.length - 1].bufferedEnd = val.bufferedEnd;
+          } else {
+            acc.push(val);
+          }
+        } else {
+          acc.push(val);
+        }
+        return acc;
+      }, [])
+      .filter((element) => element.bufferedEnd && element.bufferedStart)
+      .map((element) => {
+        const { infos } = element;
+        return {
+          startTime: element.bufferedStart as number,
+          endTime: element.bufferedEnd as number,
+          representation: infos.representation,
+          adaptation: infos.adaptation,
+        };
+      });
+
+    return getQualityChanges(timeline, this._videoElement);
   }
 
   /**

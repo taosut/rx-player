@@ -110,6 +110,7 @@ type IBufferInternalState =
   IBufferInternalStateNeedSegments;
 
 interface IBufferCurrentStatus {
+  qualityChanges$: Observable<any>|void;
   discontinuity : number;
   shouldRefreshManifest : boolean;
   state : IBufferInternalState;
@@ -348,7 +349,7 @@ export default function RepresentationBuffer<T>({
     const shouldRefreshManifest = shouldRefreshManifestForRange(content, neededRange);
 
     // /!\ Side effect to the SegmentBookkeeper
-    segmentBookkeeper.synchronizeBuffered(buffered);
+    const qualityChanges$ = segmentBookkeeper.synchronizeBuffered(buffered);
 
     let neededSegments = getSegmentsNeeded(representation, neededRange)
       .filter((segment) => {
@@ -383,6 +384,7 @@ export default function RepresentationBuffer<T>({
     }
 
     return {
+      qualityChanges$,
       discontinuity,
       shouldRefreshManifest,
       state,
@@ -486,7 +488,18 @@ export default function RepresentationBuffer<T>({
   const bufferState$ : Observable<IRepresentationBufferStateEvent> =
     observableCombineLatest(clock$, wantedBufferAhead$).pipe(
       map(getBufferStatus),
-      mergeMap(handleBufferStatus)
+      switchMap((status) => {
+        const { qualityChanges$ } = status;
+        const obs$ = typeof qualityChanges$ === "object" ? qualityChanges$ : EMPTY;
+        return observableMerge(
+          obs$.pipe(
+            tap((element) => {
+              console.log("!!!!!!!!!!!!!!!!!!", element);
+            })
+          ),
+          handleBufferStatus(status)
+        );
+      })
     );
 
   // Buffer Queue:
