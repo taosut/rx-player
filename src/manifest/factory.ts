@@ -23,6 +23,7 @@ import {
   IParsedManifest,
   IParsedRepresentation,
 } from "../parsers/manifest/types";
+import getPresentationLiveGap from "../parsers/manifest/utils/get_presentation_live_gap";
 import arrayIncludes from "../utils/array-includes";
 import { SUPPORTED_ADAPTATIONS_TYPE } from "./adaptation";
 import Manifest, {
@@ -57,6 +58,10 @@ export default function createManifest(
   externalImageTracks : ISupplementaryImageTrack|ISupplementaryImageTrack[],
   warning$ : Subject<Error|ICustomError>
 ) : Manifest {
+  if (manifestObject.isLive) {
+    manifestObject.presentationLiveGap =
+      getPresentationLiveGap(manifestObject);
+  }
   manifestObject.periods = (manifestObject.periods).map((period) => {
     Object.keys(period.adaptations).forEach((type) => {
       const adaptationsForType = period.adaptations[type];

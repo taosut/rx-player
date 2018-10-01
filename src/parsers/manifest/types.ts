@@ -88,6 +88,8 @@ export interface IParsedPeriod {
   // optional
   duration? : number;
   bitstreamSwitching? : boolean;
+  linkURL? : string;
+  resolveAtLoad? : boolean;
 }
 
 export interface IParsedManifest {

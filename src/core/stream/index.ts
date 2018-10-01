@@ -30,7 +30,6 @@ import {
   switchMap,
   takeUntil,
 } from "rxjs/operators";
-import config from "../../config";
 import { ICustomError } from "../../errors";
 import log from "../../log";
 import {
@@ -46,7 +45,6 @@ import ABRManager, {
 import { IKeySystemOption } from "../eme/types";
 import {
   createManifestPipeline,
-  IPipelineOptions,
   SegmentPipelinesManager,
 } from "../pipelines";
 import {
@@ -71,25 +69,6 @@ import {
   IStreamClockTick,
   IStreamWarningEvent,
 } from "./types";
-
-/**
- * Returns pipeline options based on the global config and the user config.
- * @param {Object} networkConfig
- * @returns {Object}
- */
-function getManifestPipelineOptions(
-  networkConfig: {
-    manifestRetry? : number;
-    offlineRetry? : number;
-  }
-) : IPipelineOptions<any, any> {
-  return {
-    maxRetry: networkConfig.manifestRetry != null ?
-      networkConfig.manifestRetry : config.DEFAULT_MAX_MANIFEST_REQUEST_RETRY,
-    maxRetryOffline: networkConfig.offlineRetry != null ?
-      networkConfig.offlineRetry : config.DEFAULT_MAX_PIPELINES_RETRY_ON_ERROR,
-  };
-}
 
 // Arguments to give to the Stream
 export interface IStreamOptions {
@@ -168,7 +147,7 @@ export default function Stream({
   // Throttled to avoid doing multiple simultaneous requests.
   const fetchManifest = throttle(createManifestPipeline(
     transport,
-    getManifestPipelineOptions(networkConfig),
+    networkConfig,
     warning$,
     supplementaryTextTracks,
     supplementaryImageTracks

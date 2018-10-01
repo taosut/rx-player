@@ -102,7 +102,7 @@ function parseMPDChildren(mpdChildren : NodeList) : IMPDChildren {
 
         case "Period":
           const period =
-            createPeriodIntermediateRepresentation(currentNode);
+          createPeriodIntermediateRepresentation(currentNode);
           periods.push(period);
           break;
       }

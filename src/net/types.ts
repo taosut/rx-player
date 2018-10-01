@@ -25,7 +25,10 @@ import Manifest, {
   Representation,
 } from "../manifest";
 import { IBifThumbnail } from "../parsers/images/bif";
-import { IParsedManifest } from "../parsers/manifest/types";
+import {
+  IParsedManifest,
+  IParsedPeriod
+} from "../parsers/manifest/types";
 
 // Contains timings informations on a single segment.
 // Those variables expose the best guess we have on the effective duration and
@@ -56,6 +59,10 @@ export interface INextSegmentsInfos {
 // loader argument for the manifest pipeline
 export interface IManifestLoaderArguments {
   url : string; // URL of the concerned manifest
+}
+
+export interface IPeriodLoaderArguments {
+  url : string; // URL of the concerned period(s)
 }
 
 // loader argument for every other pipelines
@@ -118,6 +125,10 @@ export interface IManifestParserArguments<T> {
   url : string;
 }
 
+export interface IPeriodParserArguments<T> {
+  response : ILoaderResponseValue<T>;
+}
+
 export interface ISegmentParserArguments<T> {
   response : ILoaderResponseValue<T>;
   manifest : Manifest;
@@ -134,7 +145,14 @@ export interface IManifestResult {
   url? : string; // final URL of the manifest
 }
 
+export interface IPeriodResult {
+  periods: IParsedPeriod[]; // the periods themselves
+  url? : string; // final URL of the periods
+}
+
 export type IManifestParserObservable = Observable<IManifestResult>;
+
+export type IPeriodParserObservable = Observable<IPeriodResult>;
 
 export type SegmentParserObservable = Observable<{
   segmentData : Uint8Array|ArrayBuffer|null; // Data to decode
@@ -197,6 +215,13 @@ interface ITransportManifestPipeline {
     IManifestParserObservable;
 }
 
+interface ITransportPeriodPipeline {
+  loader: (x: IPeriodLoaderArguments) =>
+    ILoaderObservable<string>;
+  parser: (x: IPeriodParserArguments<string>) =>
+    IPeriodParserObservable;
+}
+
 interface ITransportSegmentPipelineBase<T> {
   loader : (x : ISegmentLoaderArguments) => ILoaderObservable<T>;
   parser: (x : ISegmentParserArguments<T>) => SegmentParserObservable;
@@ -232,6 +257,7 @@ export type ITransportSegmentPipeline =
 
 export type ITransportPipeline =
   ITransportManifestPipeline |
+  ITransportPeriodPipeline |
   ITransportSegmentPipeline;
 
 export interface ITransportPipelines {
@@ -240,6 +266,10 @@ export interface ITransportPipelines {
   video : ITransportVideoSegmentPipeline;
   text : ITransportTextSegmentPipeline;
   image : ITransportImageSegmentPipeline;
+  period?: (
+    prevPeriodInfos: { start?: number; duration?: number }|undefined,
+    nextPeriodInfos: { start?: number }|undefined
+  ) => ITransportPeriodPipeline;
 }
 
 interface IParsedKeySystem {
