@@ -47,6 +47,7 @@ import {
   switchMapTo,
   take,
   takeUntil,
+  tap,
 } from "rxjs/operators";
 import config from "../../config";
 import log from "../../log";
@@ -840,7 +841,9 @@ class Player extends EventEmitter<PLAYER_EVENT_STRINGS, any> {
       observableOf(PLAYER_STATES.LOADING), // Begin with LOADING
 
       // LOADED as soon as the first "loaded" event is sent from the Stream
-      loaded$.pipe(take(1), mapTo(PLAYER_STATES.LOADED)),
+      loaded$.pipe(take(1), tap(() => {
+        console.timeEnd("totot");
+      }), mapTo(PLAYER_STATES.LOADED)),
 
       observableMerge(
         loadedStateUpdates$
@@ -898,6 +901,7 @@ class Player extends EventEmitter<PLAYER_EVENT_STRINGS, any> {
         takeUntil(this._priv_stopCurrentContent$)
       )
       .subscribe(() => {
+        console.time("totot");
         streamDisposable = stream.connect();
       });
   }

@@ -15,7 +15,6 @@
  */
 
 import config from "../../config";
-import { ISegment } from "../../manifest";
 
 const { SEGMENT_PRIORITIES_STEPS } = config;
 
@@ -25,20 +24,19 @@ const { SEGMENT_PRIORITIES_STEPS } = config;
  *
  * The lower is this number, the higher should be the priority of the request.
  *
- * @param {Object} segment
+ * @param {number} segmentTime
  * @param {Object} clockTick
  * @returns {number}
  */
-export default function getSegmentPriority(
-  segment : ISegment,
+export default function getPriority(
+  segmentTime : number,
   clockTick : {
     currentTime : number;
     wantedTimeOffset : number;
   }
-) : number {
+) {
   const currentTime = clockTick.currentTime + clockTick.wantedTimeOffset;
-  const segmentStart = segment.time / segment.timescale;
-  const distance = segmentStart - currentTime;
+  const distance = segmentTime - currentTime;
 
   for (
     let priority = 0;

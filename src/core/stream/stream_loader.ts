@@ -32,6 +32,7 @@ import { MediaError } from "../../errors";
 import Manifest, {
   Period,
 } from "../../manifest";
+import InitializationSegmentCache from "../../utils/initialization_segment_cache";
 import ABRManager from "../abr";
 import PeriodBufferManager, {
   IPeriodBufferManagerEvent,
@@ -69,12 +70,13 @@ export interface IStreamLoaderArgument {
   segmentPipelinesManager : SegmentPipelinesManager<any>;
   refreshManifest : (url : string) => Observable<Manifest>;
   bufferOptions : { // Buffer-related options
-    wantedBufferAhead$ : Observable<number>;
+    initializationSegmentCache : InitializationSegmentCache<unknown>;
     maxBufferAhead$ : Observable<number>;
     maxBufferBehind$ : Observable<number>;
     offlineRetry? : number;
     segmentRetry? : number;
     textTrackOptions : ITextTrackSourceBufferOptions;
+    wantedBufferAhead$ : Observable<number>;
   };
 }
 

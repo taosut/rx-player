@@ -44,7 +44,6 @@ import Manifest, {
   Adaptation,
   Period,
 } from "../../manifest";
-import arrayIncludes from "../../utils/array-includes";
 import InitializationSegmentCache from "../../utils/initialization_segment_cache";
 import SortedList from "../../utils/sorted_list";
 import WeakMapMemory from "../../utils/weak_map_memory";
@@ -124,6 +123,7 @@ export default function PeriodBufferManager(
   sourceBufferManager : SourceBufferManager,
   segmentPipelinesManager : SegmentPipelinesManager<any>,
   options: {
+    initializationSegmentCache : InitializationSegmentCache<any>;
     wantedBufferAhead$ : Observable<number>;
     maxBufferAhead$ : Observable<number>;
     maxBufferBehind$ : Observable<number>;
@@ -138,6 +138,7 @@ export default function PeriodBufferManager(
     wantedBufferAhead$,
     maxBufferAhead$,
     maxBufferBehind$,
+    initializationSegmentCache,
   } = options;
 
   /**
@@ -571,7 +572,8 @@ export default function PeriodBufferManager(
       pipeline,
       wantedBufferAhead$,
       { manifest, period, adaptation },
-      abrManager
+      abrManager,
+      initializationSegmentCache,
     ).pipe(catchError((error : Error) => {
       // non native buffer should not impact the stability of the
       // player. ie: if a text buffer sends an error, we want to
@@ -601,9 +603,6 @@ function getPipelineOptions(
   retry? : number,
   offlineRetry? : number
 ) : IPipelineOptions<any, any> {
-  const cache = arrayIncludes(["audio", "video"], bufferType) ?
-    new InitializationSegmentCache<any>() : undefined;
-
   let maxRetry : number;
   let maxRetryOffline : number;
 
@@ -617,11 +616,7 @@ function getPipelineOptions(
   maxRetryOffline = offlineRetry != null ?
     offlineRetry : DEFAULT_MAX_PIPELINES_RETRY_ON_OFFLINE;
 
-  return {
-    cache,
-    maxRetry,
-    maxRetryOffline,
-  };
+  return { maxRetry, maxRetryOffline };
 }
 
 /**

@@ -48,6 +48,7 @@ import Manifest, {
   Period,
   Representation,
 } from "../../manifest";
+import InitializationSegmentCache from "../../utils/initialization_segment_cache";
 import ABRManager from "../abr";
 import { IPrioritizedSegmentFetcher } from "../pipelines";
 import { QueuedSourceBuffer } from "../source_buffers";
@@ -55,6 +56,7 @@ import createFakeBuffer from "./create_fake_buffer";
 import EVENTS from "./events_generators";
 import RepresentationBuffer, {
   IRepresentationBufferClockTick,
+  ISegmentObject,
 } from "./representation_buffer";
 import SegmentBookkeeper from "./segment_bookkeeper";
 import {
@@ -101,7 +103,8 @@ export default function AdaptationBuffer<T>(
   segmentFetcher : IPrioritizedSegmentFetcher<T>,
   wantedBufferAhead$ : Observable<number>,
   content : { manifest : Manifest; period : Period; adaptation : Adaptation },
-  abrManager : ABRManager
+  abrManager : ABRManager,
+  initializationSegmentCache : InitializationSegmentCache<ISegmentObject<T>>
 ) : Observable<IAdaptationBufferEvent<T>> {
   const { manifest, period, adaptation } = content;
   const abr$ = getABRForAdaptation(adaptation, abrManager, clock$)
@@ -179,6 +182,7 @@ export default function AdaptationBuffer<T>(
       segmentBookkeeper,
       segmentFetcher,
       wantedBufferAhead$,
+      initializationSegmentCache,
     }).pipe(
     catchError((error) => {
       // TODO only for smooth/to Delete? Do it in the stream?

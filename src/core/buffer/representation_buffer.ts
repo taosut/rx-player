@@ -40,6 +40,7 @@ import Manifest, {
   Period,
   Representation,
 } from "../../manifest";
+import InitializationSegmentCache from "../../utils/initialization_segment_cache";
 import SimpleSet from "../../utils/simple_set";
 import {
   IPrioritizedSegmentFetcher,
@@ -101,6 +102,7 @@ export interface IRepresentationBufferArguments<T> {
   segmentBookkeeper : SegmentBookkeeper;
   segmentFetcher : IPrioritizedSegmentFetcher<T>;
   wantedBufferAhead$ : Observable<number>;
+  initializationSegmentCache : InitializationSegmentCache<ISegmentObject<T>>;
 }
 
 // Buffer state used only internally
@@ -149,7 +151,7 @@ interface ISegmentInfos {
 }
 
 // Informations about any Segment of a given Representation.
-interface ISegmentObject<T> {
+export interface ISegmentObject<T> {
   segmentData : T|null; // What will be pushed to the SourceBuffer
   segmentInfos : ISegmentInfos|null; // informations about the segment's start
                                      // and duration
@@ -189,24 +191,26 @@ export default function RepresentationBuffer<T>({
   segmentBookkeeper, // keep track of what segments already are in the SourceBuffer
   segmentFetcher, // allows to download new segments
   wantedBufferAhead$, // emit the buffer goal
+  initializationSegmentCache,
 } : IRepresentationBufferArguments<T>) : Observable<IRepresentationBufferEvent<T>> {
   // unwrap components of the content
-  const {
-    manifest,
-    period,
-    adaptation,
-    representation,
-  } = content;
+  const { manifest, period, adaptation, representation } = content;
   const bufferType = adaptation.type;
+
+  // Saved initSegment state for this representation.
   const initSegment = representation.index.getInitSegment();
+  let initSegmentObject : ISegmentObject<T>|null = (() => {
+    if (initSegment == null) {
+      return { segmentData: null, segmentInfos: null, segmentOffset: 0 };
+    } else {
+      const cachedInitSegment = initializationSegmentCache.get(content);
+      return cachedInitSegment == null ? null : cachedInitSegment;
+    }
+  })();
 
   // Compute paddings, then used to calculate the wanted range of Segments
   // wanted.
   const paddings = getBufferPaddings(adaptation);
-
-  // Saved initSegment state for this representation.
-  let initSegmentObject : ISegmentObject<T>|null = initSegment == null ?
-    { segmentData: null, segmentInfos: null, segmentOffset: 0 } : null;
 
   // Subject to start/restart a Buffer Queue.
   const startQueue$ = new ReplaySubject<void>(1);
@@ -226,12 +230,31 @@ export default function RepresentationBuffer<T>({
   // removed after it.
   const sourceBufferWaitingQueue = new SimpleSet();
 
+  const segmentsWaitingForInitSegment : Array<ILoadedSegmentObject<T>> = [];
+
+  /**
+   * @returns {Observable}
+   */
+  function requestInitSegment(
+    priority : number
+  ) : Observable<ILoadedSegmentObject<T>> {
+    return initSegment == null ? EMPTY : segmentFetcher.createRequest({
+      adaptation,
+      init: undefined,
+      manifest,
+      period,
+      representation,
+      segment: initSegment,
+    }, priority)
+      .pipe(map((args) => ({ segment: initSegment, value: args.parsed })));
+  }
+
   /**
    * Request every Segment in the ``downloadQueue`` on subscription.
    * Emit the data of a segment when a request succeeded.
    * @returns {Observable}
    */
-  function requestSegments() : Observable<ILoadedSegmentObject<T>> {
+  function requestSegmentsFromQueue() : Observable<ILoadedSegmentObject<T>> {
     const requestNextSegment$ : Observable<ILoadedSegmentObject<T>> =
       observableDefer(() : Observable<ILoadedSegmentObject<T>> => {
         const currentNeededSegment = downloadQueue.shift();
@@ -278,12 +301,14 @@ export default function RepresentationBuffer<T>({
   ) : Observable<IBufferEventAddedSegment<T>> {
     return observableDefer(() => {
       const { segment } = data;
-      const { segmentInfos, segmentData, segmentOffset } = data.value;
-
       if (segment.isInit) {
         initSegmentObject = data.value;
+      } else if (initSegment != null && initSegmentObject == null) {
+        segmentsWaitingForInitSegment.push(data);
+        return EMPTY;
       }
 
+      const { segmentInfos, segmentData, segmentOffset } = data.value;
       if (segmentData == null) {
         // no segmentData to add here (for example, a text init segment)
         // just complete directly without appending anything
@@ -351,36 +376,34 @@ export default function RepresentationBuffer<T>({
     segmentBookkeeper.synchronizeBuffered(buffered);
 
     let neededSegments = getSegmentsNeeded(representation, neededRange)
-      .filter((segment) => {
-        return shouldDownloadSegment(
-          segment, content, segmentBookkeeper, neededRange, sourceBufferWaitingQueue);
-      })
+      .filter((segment) =>
+        shouldDownloadSegment(
+          segment, content, segmentBookkeeper, neededRange, sourceBufferWaitingQueue)
+      )
       .map((segment) => ({
-        priority: getSegmentPriority(segment, timing),
+        priority: getSegmentPriority(segment.time / segment.timescale, timing),
         segment,
       }));
 
     if (initSegment != null && initSegmentObject == null) {
-      neededSegments = [ // prepend initialization segment
-        {
-          segment: initSegment,
-          priority: getSegmentPriority(initSegment, timing),
-        },
-        ...neededSegments,
-      ];
+      neededSegments = [{
+        priority: getSegmentPriority(period.start, timing),
+        segment: initSegment,
+      }].concat(neededSegments);
     }
 
-    let state : IBufferInternalState;
-    if (!neededSegments.length) {
-      state = period.end != null && neededRange.end >= period.end ?
-        { type: "full-buffer" as "full-buffer", value: undefined } :
-        { type: "idle-buffer" as "idle-buffer", value: undefined };
-    } else {
-      state = {
-        type: "need-segments" as "need-segments",
-        value: { neededSegments },
-      };
-    }
+    const state = (() => {
+      if (!neededSegments.length) {
+        return period.end != null && neededRange.end >= period.end ?
+          { type: "full-buffer" as "full-buffer", value: undefined } :
+          { type: "idle-buffer" as "idle-buffer", value: undefined };
+      } else {
+        return {
+          type: "need-segments" as "need-segments",
+          value: { neededSegments },
+        };
+      }
+    })();
 
     return {
       discontinuity,
@@ -401,11 +424,7 @@ export default function RepresentationBuffer<T>({
   function handleBufferStatus(
     status : IBufferCurrentStatus
   ) : Observable<IRepresentationBufferStateEvent> {
-    const {
-      discontinuity,
-      shouldRefreshManifest,
-      state,
-    } = status;
+    const { discontinuity, shouldRefreshManifest, state } = status;
 
     const neededActions =
       getNeededActions(bufferType, discontinuity, shouldRefreshManifest);
@@ -438,8 +457,7 @@ export default function RepresentationBuffer<T>({
       }
       downloadQueue = [];
       startQueue$.next(); // (re-)start with an empty queue
-      return state.type === "full-buffer" ?
-        EVENTS.fullBuffer(bufferType) : {
+      return state.type === "full-buffer" ? EVENTS.fullBuffer(bufferType) : {
         type: "idle-buffer" as "idle-buffer",
         value: { bufferType },
       };
@@ -493,10 +511,15 @@ export default function RepresentationBuffer<T>({
   //   - download segment
   //   - append them to the SourceBuffer
   const bufferQueue$ = startQueue$.pipe(
-    switchMap(requestSegments),
+    switchMap(requestSegmentsFromQueue),
     mergeMap(appendSegment)
   );
 
+  /**
+   * Request every Segment in the ``downloadQueue`` on subscription.
+   * Emit the data of a segment when a request succeeded.
+   * @returns {Observable}
+   */
   return observableMerge(bufferState$, bufferQueue$)
     .pipe(share());
 }

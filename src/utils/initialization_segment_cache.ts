@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  ISegment,
-  Representation,
-} from "../manifest";
+import { Representation } from "../manifest";
 
 /**
  * Caching object used to cache initialization segments.
@@ -36,18 +33,10 @@ class InitializationSegmentCache<T> {
    * @param {*} response
    */
   public add(
-    {
-      representation,
-      segment,
-    } : {
-      representation : Representation;
-      segment : ISegment;
-    },
+    { representation } : { representation : Representation },
     response : T
   ) : void {
-    if (segment.isInit) {
-      this._cache.set(representation, response);
-    }
+    this._cache.set(representation, response);
   }
 
   /**
@@ -55,19 +44,11 @@ class InitializationSegmentCache<T> {
    * @returns {*} response
    */
   public get(
-    {
-      representation,
-      segment,
-    } : {
-      representation : Representation;
-      segment : ISegment;
-    }
+    { representation } : { representation : Representation }
   ) : T|null {
-    if (segment.isInit) {
-      const value = this._cache.get(representation);
-      if (value != null) {
-        return value;
-      }
+    const value = this._cache.get(representation);
+    if (value != null) {
+      return value;
     }
     return null;
   }

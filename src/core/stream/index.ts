@@ -38,6 +38,7 @@ import {
   ISupplementaryTextTrack,
 } from "../../manifest";
 import { ITransportPipelines } from "../../net";
+import InitializationSegmentCache from "../../utils/initialization_segment_cache";
 import throttle from "../../utils/rx-throttle";
 import ABRManager, {
   IABRMetric,
@@ -198,6 +199,8 @@ export default function Stream({
   // through a throwing Observable.
   const mediaErrorManager$ = createMediaErrorManager(mediaElement);
 
+  const initializationSegmentCache = new InitializationSegmentCache();
+
   // Start the whole Stream.
   const stream$ = observableCombineLatest(
     openMediaSource(mediaElement),
@@ -212,9 +215,10 @@ export default function Stream({
       segmentPipelinesManager,
       refreshManifest: fetchManifest,
       bufferOptions: objectAssign({
-        textTrackOptions,
+        initializationSegmentCache,
         offlineRetry: networkConfig.offlineRetry,
         segmentRetry: networkConfig.segmentRetry,
+        textTrackOptions,
       }, bufferOptions),
     });
 
