@@ -25,7 +25,7 @@ interface IContentProtection {
 export interface IRepresentationArguments {
   // -- required
   bitrate : number;
-  index : IRepresentationIndex;
+  index : IRepresentationIndex|undefined;
 
   // -- optional
   frameRate? : string;
@@ -85,7 +85,11 @@ class Representation {
       this.frameRate = args.frameRate;
     }
 
-    this.index = args.index;
+    if (args.index) {
+      this.index = args.index;
+    } else {
+      throw new Error("Representation shall contain index.");
+    }
   }
 
   /**

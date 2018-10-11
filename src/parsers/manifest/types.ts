@@ -24,7 +24,7 @@ export interface IContentProtection {
 export interface IParsedRepresentation {
   // required
   bitrate : number;
-  index : IRepresentationIndex;
+  index : IRepresentationIndex|undefined;
   id: string;
 
   // optional
@@ -81,7 +81,7 @@ export interface IParsedAdaptation {
 export interface IParsedPeriod {
   // required
   id : string;
-  start : number;
+  start? : number;
   end? : number;
   adaptations : IParsedAdaptations;
 
@@ -90,6 +90,7 @@ export interface IParsedPeriod {
   bitstreamSwitching? : boolean;
   linkURL? : string;
   resolveAtLoad? : boolean;
+  load?: any;
 }
 
 export interface IParsedManifest {

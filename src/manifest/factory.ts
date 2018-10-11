@@ -79,7 +79,8 @@ export default function createManifest(
 
     if (
       !period.adaptations.video &&
-      !period.adaptations.audio
+      !period.adaptations.audio &&
+      period.resolveAtLoad !== false
     ) {
       throw new MediaError("MANIFEST_PARSE_ERROR", null, true);
     }

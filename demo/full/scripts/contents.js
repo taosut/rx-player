@@ -1,5 +1,11 @@
 export default [
   {
+    "name": "Big Buck Bunny - xLinks onRequest",
+    "url": "http://dash.akamaized.net/dash264/TestCases/5b/nomor/9.mpd",
+    "transport": "dash",
+    "live": false,
+  },
+  {
     "name": "DASH-IF - SegmentTimeline live stream",
     "url": "https://vm2.dashif.org/livesim-dev/segtimeline_1/testpic_6s/Manifest.mpd",
     "transport": "dash",

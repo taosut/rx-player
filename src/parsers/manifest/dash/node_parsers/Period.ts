@@ -104,7 +104,7 @@ export function getPeriodsFromIntermediate(
     }
 
   // 3. Find the start of the Period (required)
-  let periodStart : number;
+  let periodStart : number|undefined;
   if (period.attributes.start != null) {
     periodStart = period.attributes.start;
   } else {
@@ -117,8 +117,6 @@ export function getPeriodsFromIntermediate(
       const prevPeriod = parsedPeriods[i - 1] || prevPeriodInfos;
       if (prevPeriod && prevPeriod.duration != null && prevPeriod.start != null) {
         periodStart = prevPeriod.start + prevPeriod.duration;
-      } else {
-        throw new Error("Missing start time when parsing periods.");
       }
     }
   }
@@ -158,57 +156,59 @@ export function getPeriodsFromIntermediate(
         // 4-1. Find Index
         function findAdaptationIndex(
           representation : IRepresentationIntermediateRepresentation
-        ): IRepresentationIndex {
+        ): IRepresentationIndex|undefined {
           const repId = representation.attributes.id || "";
           const repBitrate = representation.attributes.bitrate;
           const baseURL = representation.children.baseURL;
           const representationURL = resolveURL(
             adaptationRootURL, baseURL);
-          let adaptationIndex : IRepresentationIndex;
-          if (adaptationChildren.segmentBase != null) {
-            const { segmentBase } = adaptationChildren;
-            adaptationIndex = new BaseRepresentationIndex(segmentBase, {
-              periodStart,
-              representationURL,
-              representationId: repId,
-              representationBitrate: repBitrate,
-            });
-          } else if (adaptationChildren.segmentList != null) {
-            const { segmentList } = adaptationChildren;
-            adaptationIndex = new ListRepresentationIndex(segmentList, {
-              periodStart,
-              representationURL,
-              representationId: repId,
-              representationBitrate: repBitrate,
-            });
-          } else if (adaptationChildren.segmentTemplate != null) {
-            const { segmentTemplate } = adaptationChildren;
-            adaptationIndex = segmentTemplate.indexType === "timeline" ?
-              new TimelineRepresentationIndex(segmentTemplate, {
-                periodStart,
-                representationURL,
-                representationId: repId,
-                representationBitrate: repBitrate,
-              }) :
-              new TemplateRepresentationIndex(segmentTemplate, {
+          let adaptationIndex : IRepresentationIndex|undefined;
+          if (periodStart != null) {
+            if (adaptationChildren.segmentBase != null) {
+              const { segmentBase } = adaptationChildren;
+              adaptationIndex = new BaseRepresentationIndex(segmentBase, {
                 periodStart,
                 representationURL,
                 representationId: repId,
                 representationBitrate: repBitrate,
               });
-          } else {
-            adaptationIndex = new TemplateRepresentationIndex({
-              duration: Number.MAX_VALUE,
-              timescale: 1,
-              startNumber: 0,
-              initialization: { media: "" },
-              media: "",
-            }, {
-              periodStart,
-              representationURL,
-              representationId: repId,
-              representationBitrate: repBitrate,
-            });
+            } else if (adaptationChildren.segmentList != null) {
+              const { segmentList } = adaptationChildren;
+              adaptationIndex = new ListRepresentationIndex(segmentList, {
+                periodStart,
+                representationURL,
+                representationId: repId,
+                representationBitrate: repBitrate,
+              });
+            } else if (adaptationChildren.segmentTemplate != null) {
+              const { segmentTemplate } = adaptationChildren;
+              adaptationIndex = segmentTemplate.indexType === "timeline" ?
+                new TimelineRepresentationIndex(segmentTemplate, {
+                  periodStart,
+                  representationURL,
+                  representationId: repId,
+                  representationBitrate: repBitrate,
+                }) :
+                new TemplateRepresentationIndex(segmentTemplate, {
+                  periodStart,
+                  representationURL,
+                  representationId: repId,
+                  representationBitrate: repBitrate,
+                });
+            } else {
+              adaptationIndex = new TemplateRepresentationIndex({
+                duration: Number.MAX_VALUE,
+                timescale: 1,
+                startNumber: 0,
+                initialization: { media: "" },
+                media: "",
+              }, {
+                periodStart,
+                representationURL,
+                representationId: repId,
+                representationBitrate: repBitrate,
+              });
+            }
           }
           return adaptationIndex;
         }
@@ -231,40 +231,42 @@ export function getPeriodsFromIntermediate(
             }
 
             // 4-2-2. Find Index
-            let representationIndex : IRepresentationIndex;
-            if (representation.children.segmentBase != null) {
-              const { segmentBase } = representation.children;
-              representationIndex = new BaseRepresentationIndex(segmentBase, {
-                periodStart,
-                representationURL,
-                representationId: repId,
-                representationBitrate: repBitrate,
-              });
-            } else if (representation.children.segmentList != null) {
-              const { segmentList } = representation.children;
-              representationIndex = new ListRepresentationIndex(segmentList, {
-                periodStart,
-                representationURL,
-                representationId: repId,
-                representationBitrate: repBitrate,
-              });
-            } else if (representation.children.segmentTemplate != null) {
-              const { segmentTemplate } = representation.children;
-              representationIndex = segmentTemplate.indexType === "timeline" ?
-                new TimelineRepresentationIndex(segmentTemplate, {
-                  periodStart,
-                  representationURL,
-                  representationId: repId,
-                  representationBitrate: repBitrate,
-                }) :
-                new TemplateRepresentationIndex(segmentTemplate, {
+            let representationIndex : IRepresentationIndex|undefined;
+            if (periodStart != null) {
+              if (representation.children.segmentBase != null) {
+                const { segmentBase } = representation.children;
+                representationIndex = new BaseRepresentationIndex(segmentBase, {
                   periodStart,
                   representationURL,
                   representationId: repId,
                   representationBitrate: repBitrate,
                 });
-            } else {
-              representationIndex = findAdaptationIndex(representation);
+              } else if (representation.children.segmentList != null) {
+                const { segmentList } = representation.children;
+                representationIndex = new ListRepresentationIndex(segmentList, {
+                  periodStart,
+                  representationURL,
+                  representationId: repId,
+                  representationBitrate: repBitrate,
+                });
+              } else if (representation.children.segmentTemplate != null) {
+                const { segmentTemplate } = representation.children;
+                representationIndex = segmentTemplate.indexType === "timeline" ?
+                  new TimelineRepresentationIndex(segmentTemplate, {
+                    periodStart,
+                    representationURL,
+                    representationId: repId,
+                    representationBitrate: repBitrate,
+                  }) :
+                  new TemplateRepresentationIndex(segmentTemplate, {
+                    periodStart,
+                    representationURL,
+                    representationId: repId,
+                    representationBitrate: repBitrate,
+                  });
+              } else {
+                representationIndex = findAdaptationIndex(representation);
+              }
             }
             // 4-2-3. Set ID
             const representationID = representation.attributes.id != null ?

@@ -42,11 +42,23 @@ export interface ISupplementaryTextTrack {
   closedCaption : boolean;
 }
 
+export interface IIncompletePeriodArguments {
+  id: string;
+  adaptations: IAdaptationsArguments;
+  start?: number;
+  duration?: number;
+  linkURL?: string;
+  resolveAtLoad?: boolean;
+}
+
 export interface IPeriodArguments {
   id: string;
   adaptations: IAdaptationsArguments;
-  start: number;
+  start?: number;
   duration?: number;
+  linkURL?: string;
+  resolveAtLoad?: boolean;
+  load?: any;
 }
 
 export default class Period {
@@ -76,7 +88,12 @@ export default class Period {
           return acc;
         }, {});
     this.duration = args.duration;
-    this.start = args.start;
+
+    if (args.start != null) {
+      this.start = args.start;
+    } else {
+      throw new Error("Period start must be known when instanciating new period object.");
+    }
 
     if (this.duration != null && this.start != null) {
       this.end = this.start + this.duration;

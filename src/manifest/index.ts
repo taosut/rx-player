@@ -14,6 +14,15 @@
  * limitations under the License.
  */
 
+import {
+  combineLatest as observableCombineLatest,
+  of as observableOf,
+} from "rxjs";
+
+import {
+  map
+} from "rxjs/operators";
+
 import arrayFind from "array-find";
 import log from "../log";
 import assert from "../utils/assert";
@@ -31,6 +40,8 @@ import IRepresentationIndex, {
   ISegment,
   StaticRepresentationIndex,
 } from "./representation_index";
+
+import { IParsedPeriod } from "../parsers/manifest/types";
 
 type ManifestAdaptations = Partial<Record<IAdaptationType, Adaptation[]>>;
 
@@ -79,6 +90,7 @@ export default class Manifest {
   public presentationLiveGap? : number;
   public timeShiftBufferDepth? : number;
 
+  private _incompletePeriods : IPeriodArguments[];
   private _duration : number;
 
   /**
@@ -90,8 +102,21 @@ export default class Manifest {
     this.id = args.id == null ? nId : "" + args.id;
     this.transport = args.transportType || "";
 
-    this.periods = args.periods.map((period) => {
-      return new Period(period);
+    this.periods = [];
+    this._incompletePeriods = [];
+
+    args.periods.forEach((period) => {
+      if (
+        period.start != null &&
+        (
+          period.adaptations.video ||
+          period.adaptations.audio
+        )
+      ) {
+        this.periods.push(new Period(period));
+      } else {
+        this._incompletePeriods.push(period);
+      }
     });
 
     /**
@@ -193,6 +218,51 @@ export default class Manifest {
       this.adaptations.text = this.adaptations.text ?
         this.adaptations.text.concat(newTextAdaptations) : newTextAdaptations;
     }
+  }
+
+  updatePeriodsForPlaybackTime(time: number) {
+    const periods$ =
+      this._incompletePeriods.map((period) => {
+        if (
+          period.resolveAtLoad === false &&
+          period.linkURL != null &&
+          period.load &&
+          period.start &&
+          time >= period.start - 30
+        ) {
+          return period.load().pipe(
+            map((loadedPeriods: IParsedPeriod[]) => {
+              loadedPeriods[0].start = period.start;
+              return loadedPeriods;
+            })
+          );
+        }
+        return observableOf(period);
+      });
+
+    return observableCombineLatest(
+      periods$
+    ).pipe(
+      map((_periods) => {
+        const periods: IParsedPeriod[] =
+          (_periods as any)
+            .flat()
+            .map((period: IParsedPeriod, i: number) => {
+              const prevPeriod = _periods[i - 1];
+              if (
+                prevPeriod &&
+                prevPeriod.start &&
+                prevPeriod.duration
+              ) {
+                period.start = prevPeriod.start + prevPeriod.duration;
+              }
+              return period;
+            });
+        debugger;
+        // XXX TODO update indexes
+        // XXX TODO CHECK IF NEW COMPLETE PERIODS
+      })
+    );
   }
 
   /**

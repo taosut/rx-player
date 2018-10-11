@@ -85,7 +85,8 @@ function getPipelineOptions(
 function loadPeriodFromLink(
   transport : ITransportPipelines,
   pipelineOptions : IPipelineOptions<IPeriodLoaderArguments, string>,
-  periods : IParsedPeriod[]
+  periods : IParsedPeriod[],
+  loadingStep: boolean
 ): Observable<IParsedPeriod[]> {
   const { period: periodPipeline } = transport;
   if (periodPipeline) {
@@ -96,7 +97,7 @@ function loadPeriodFromLink(
         const prevPeriod = periods[i - 1];
         const nextPeriod = periods[i + 1];
         if (period.linkURL != null) {
-          if (period.resolveAtLoad) {
+          if (loadingStep && period.resolveAtLoad || !loadingStep) {
             const period$ = Pipeline<
               IPeriodLoaderArguments, string, IPeriodResult
             >(
@@ -111,8 +112,15 @@ function loadPeriodFromLink(
               )
             );
           } else {
-            throw new Error(
-              "Can\"t lazy load periods.");
+            period.load = () => {
+              return loadPeriodFromLink(
+                transport,
+                pipelineOptions,
+                [period],
+                false
+              );
+            };
+            acc.push(observableOf(period));
           }
         } else {
           acc.push(observableOf(period));
@@ -190,7 +198,7 @@ export default function createManifestPipeline(
       mergeMap(({ value }) : Observable<Manifest> => {
         const { periods } = value.parsed.manifest;
 
-        return loadPeriodFromLink(transport, pipelineOptions, periods).pipe(
+        return loadPeriodFromLink(transport, pipelineOptions, periods, true).pipe(
           map((loadedPeriods) => {
             value.parsed.manifest.periods = loadedPeriods;
             return createManifest(
