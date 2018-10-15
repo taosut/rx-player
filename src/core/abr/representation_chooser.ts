@@ -24,6 +24,7 @@ import {
 } from "rxjs";
 import {
   map,
+  mergeMap,
   shareReplay,
   switchMap,
   takeUntil,
@@ -31,13 +32,18 @@ import {
 } from "rxjs/operators";
 import config from "../../config";
 import log from "../../log";
-import { Representation } from "../../manifest";
+import {
+  Adaptation,
+  Representation,
+} from "../../manifest";
 import { IBufferType } from "../source_buffers";
 import BandwidthEstimator from "./bandwidth_estimator";
 import EWMA from "./ewma";
 import filterByBitrate from "./filterByBitrate";
 import filterByWidth from "./filterByWidth";
 import fromBitrateCeil from "./fromBitrateCeil";
+
+// import arrayIncludes from "../../utils/array-includes";
 
 const {
   ABR_REGULAR_FACTOR,
@@ -52,6 +58,7 @@ export interface IABREstimation {
   manual: boolean; // True if the representation choice was manually dictated
                    // by the user
   representation: Representation; // The chosen representation
+  adaptation: Adaptation;
 }
 
 interface IRepresentationChooserClockTick {
@@ -116,6 +123,10 @@ interface IRepresentationChooserOptions {
   maxAutoBitrate?: number;
 }
 
+export type IRepresentationEnhanced = Representation & {
+  adaptation: Adaptation;
+};
+
 /**
  * Returns an observable emitting only the representation concerned by the
  * bitrate ceil given.
@@ -124,7 +135,7 @@ interface IRepresentationChooserOptions {
  * @returns {Observable}
  */
 function setManualRepresentation(
-  representations : Representation[],
+  representations : IRepresentationEnhanced[],
   bitrate : number
 ) : Observable<IABREstimation> {
   const chosenRepresentation =
@@ -135,6 +146,7 @@ function setManualRepresentation(
     bitrate: undefined, // Bitrate estimation is deactivated here
     manual: true,
     representation: chosenRepresentation,
+    adaptation: chosenRepresentation.adaptation,
   });
 }
 
@@ -199,9 +211,9 @@ function estimateRequestBandwidth(request : IRequestInfo) : number|undefined {
  * @returns {Array.<Representation>}
  */
 function getFilteredRepresentations(
-  representations : Representation[],
+  representations : IRepresentationEnhanced[],
   filters : IFilters
-) : Representation[] {
+) : IRepresentationEnhanced[] {
   let _representations = representations;
 
   if (filters.bitrate != null) {
@@ -352,143 +364,186 @@ export default class RepresentationChooser {
    */
   public get$(
     clock$ : Observable<IRepresentationChooserClockTick>,
-    representations : Representation[]
+    adaptations : Adaptation[],
+    initialAdaptation?: Adaptation
   ) : Observable<IABREstimation> {
-    if (!representations.length) {
-      throw new Error("ABRManager: no representation choice given");
-    }
-    if (representations.length === 1) {
-      return observableOf({
-        bitrate: undefined, // Bitrate estimation is deactivated here
-        manual: false,
-        representation: representations[0],
-      }).pipe(takeUntil(this._dispose$));
+    // XXX TODO Choose adaptation
+    if (!adaptations.length) {
+      throw new Error("ABRManager: no adaptation choice given");
     }
 
-    const {
-      manualBitrate$,
-      maxAutoBitrate$,
-      _initialBitrate,
-    }  = this;
+    let currentAdaptation = initialAdaptation || adaptations[0];
+    const adaptationsSubject$ = new Subject<Adaptation[]>();
 
-    const _deviceEventsArray : Array<Observable<IFilters>> = [];
+    adaptationsSubject$.next(adaptations);
 
-    if (this._limitWidth$) {
-      _deviceEventsArray.push(
-        this._limitWidth$
-          .pipe(map(width => ({ width })))
-      );
-    }
+    return adaptationsSubject$.pipe(
+      map((_adaptations) => {
+        return _adaptations.reduce((acc: IRepresentationEnhanced[], adaptation) => {
+          if (
+            adaptation.id === currentAdaptation.id ||
+            // arrayIncludes(adaptation.id, firstAdaptation.seamlessAuthIds)
+            true
+          ) {
+            adaptation.representations.forEach((representation) => {
+              acc.push(
+                objectAssign(
+                  {},
+                  representation,
+                  { adaptation }
+                )
+              );
+            });
+          }
+          return acc;
+        }, []);
+      }),
+      mergeMap((representations) => {
+        if (!representations.length) {
+          throw new Error("ABRManager: no representation choice given");
+        }
+        if (representations.length === 1) {
+          return observableOf({
+            bitrate: undefined, // Bitrate estimation is deactivated here
+            manual: false,
+            representation: representations[0],
+            adaptation: representations[0].adaptation,
+          }).pipe(takeUntil(this._dispose$));
+        }
 
-    if (this._throttle$) {
-      _deviceEventsArray.push(
-        this._throttle$
-          .pipe(map(bitrate => ({ bitrate })))
-      );
-    }
+        const {
+          manualBitrate$,
+          maxAutoBitrate$,
+          _initialBitrate,
+        }  = this;
 
-    /**
-     * Emit restrictions on the pools of available representations to choose
-     * from.
-     * @type {Observable}
-     */
-    const deviceEvents$ : Observable<IFilters> = _deviceEventsArray.length ?
-      observableCombineLatest(..._deviceEventsArray)
-        .pipe(map((args : IFilters[]) => objectAssign({}, ...args))) :
-      observableOf({});
+        const _deviceEventsArray : Array<Observable<IFilters>> = [];
 
-    /**
-     * Store the last client's bitrate generated by our estimation algorithms.
-     * @type {Number|undefined}
-     */
-    let lastEstimatedBitrate : number|undefined;
+        if (this._limitWidth$) {
+          _deviceEventsArray.push(
+            this._limitWidth$
+              .pipe(map(width => ({ width })))
+          );
+        }
+        if (this._throttle$) {
+          _deviceEventsArray.push(
+            this._throttle$
+              .pipe(map(bitrate => ({ bitrate })))
+          );
+        }
 
-    return manualBitrate$.pipe(switchMap(manualBitrate => {
-      if (manualBitrate >= 0) {
-        // -- MANUAL mode --
-        return setManualRepresentation(representations, manualBitrate);
-      }
+        /**
+         * Emit restrictions on the pools of available representations to choose
+         * from.
+         * @type {Observable}
+         */
+        const deviceEvents$ : Observable<IFilters> = _deviceEventsArray.length ?
+          observableCombineLatest(..._deviceEventsArray)
+            .pipe(map((args : IFilters[]) => objectAssign({}, ...args))) :
+          observableOf({});
 
-      // -- AUTO mode --
-      let inStarvationMode = false; // == buffer gap too low == panic mode
-      return observableCombineLatest(clock$, maxAutoBitrate$, deviceEvents$)
-        .pipe(
-          map(([ clock, maxAutoBitrate, deviceEvents ]) => {
-            let nextBitrate;
-            let bandwidthEstimate;
-            const { bufferGap } = clock;
+        /**
+         * Store the last client's bitrate generated by our estimation algorithms.
+         * @type {Number|undefined}
+         */
+        let lastEstimatedBitrate : number|undefined;
 
-            // check if should get in/out of starvation mode
-            if (!inStarvationMode && bufferGap <= ABR_STARVATION_GAP) {
-              log.info("ABR - enter starvation mode.");
-              inStarvationMode = true;
-            } else if (inStarvationMode && bufferGap >= OUT_OF_STARVATION_GAP) {
-              log.info("ABR - exit starvation mode.");
-              inStarvationMode = false;
-            }
+        return manualBitrate$.pipe(switchMap(manualBitrate => {
+          if (manualBitrate >= 0) {
+            // -- MANUAL mode --
+            return setManualRepresentation(representations, manualBitrate);
+          }
 
-            // If in starvation mode, check if a quick new estimate can be done
-            // from the last requests.
-            // If so, cancel previous estimations and replace it by the new one
-            if (inStarvationMode) {
-              bandwidthEstimate = estimateStarvationModeBitrate(
-                this._currentRequests, clock, lastEstimatedBitrate);
+          // -- AUTO mode --
+          let inStarvationMode = false; // == buffer gap too low == panic mode
+          return observableCombineLatest(clock$, maxAutoBitrate$, deviceEvents$)
+            .pipe(
+              map(([ clock, maxAutoBitrate, deviceEvents ]) => {
+                let nextBitrate;
+                let bandwidthEstimate;
+                const { bufferGap } = clock;
 
-              if (bandwidthEstimate != null) {
-                log.info("ABR - starvation mode emergency estimate:", bandwidthEstimate);
-                this.resetEstimate();
-                const currentBitrate = clock.bitrate;
-                nextBitrate = currentBitrate == null ?
-                  Math.min(bandwidthEstimate, maxAutoBitrate) :
-                  Math.min(bandwidthEstimate, maxAutoBitrate, currentBitrate);
-              }
-            }
+                // check if should get in/out of starvation mode
+                if (!inStarvationMode && bufferGap <= ABR_STARVATION_GAP) {
+                  log.info("ABR - enter starvation mode.");
+                  inStarvationMode = true;
+                } else if (inStarvationMode && bufferGap >= OUT_OF_STARVATION_GAP) {
+                  log.info("ABR - exit starvation mode.");
+                  inStarvationMode = false;
+                }
 
-            // if nextBitrate is not yet defined, do the normal estimation
-            if (nextBitrate == null) {
-              bandwidthEstimate = this.estimator.getEstimate();
+                // If in starvation mode, check if a quick new estimate can be done
+                // from the last requests.
+                // If so, cancel previous estimations and replace it by the new one
+                if (inStarvationMode) {
+                  bandwidthEstimate = estimateStarvationModeBitrate(
+                    this._currentRequests, clock, lastEstimatedBitrate);
 
-              let nextEstimate;
-              if (bandwidthEstimate != null) {
-                nextEstimate = inStarvationMode ?
-                  bandwidthEstimate * ABR_STARVATION_FACTOR :
-                  bandwidthEstimate * ABR_REGULAR_FACTOR;
-              } else if (lastEstimatedBitrate != null) {
-                nextEstimate = inStarvationMode ?
-                  lastEstimatedBitrate * ABR_STARVATION_FACTOR :
-                  lastEstimatedBitrate * ABR_REGULAR_FACTOR;
-              } else {
-                nextEstimate = _initialBitrate;
-              }
-              nextBitrate = Math.min(nextEstimate, maxAutoBitrate);
-            }
+                  if (bandwidthEstimate != null) {
+                    log.info(
+                      "ABR - starvation mode emergency estimate:", bandwidthEstimate);
+                    this.resetEstimate();
+                    const currentBitrate = clock.bitrate;
+                    nextBitrate = currentBitrate == null ?
+                      Math.min(bandwidthEstimate, maxAutoBitrate) :
+                      Math.min(bandwidthEstimate, maxAutoBitrate, currentBitrate);
+                  }
+                }
 
-            if (clock.speed > 1) {
-              nextBitrate /= clock.speed;
-            }
+                // if nextBitrate is not yet defined, do the normal estimation
+                if (nextBitrate == null) {
+                  bandwidthEstimate = this.estimator.getEstimate();
 
-            const _representations =
-              getFilteredRepresentations(representations, deviceEvents);
+                  let nextEstimate;
+                  if (bandwidthEstimate != null) {
+                    nextEstimate = inStarvationMode ?
+                      bandwidthEstimate * ABR_STARVATION_FACTOR :
+                      bandwidthEstimate * ABR_REGULAR_FACTOR;
+                  } else if (lastEstimatedBitrate != null) {
+                    nextEstimate = inStarvationMode ?
+                      lastEstimatedBitrate * ABR_STARVATION_FACTOR :
+                      lastEstimatedBitrate * ABR_REGULAR_FACTOR;
+                  } else {
+                    nextEstimate = _initialBitrate;
+                  }
+                  nextBitrate = Math.min(nextEstimate, maxAutoBitrate);
+                }
 
-            return {
-              bitrate: bandwidthEstimate,
-              manual: false,
-              representation: fromBitrateCeil(_representations, nextBitrate) ||
-              representations[0],
-            };
+                if (clock.speed > 1) {
+                  nextBitrate /= clock.speed;
+                }
 
-          }),
+                const _representations =
+                  getFilteredRepresentations(representations, deviceEvents);
 
-          tap(({ bitrate }) => {
-            if (bitrate != null) {
-              log.debug("ABR - calculated bitrate:", bitrate);
-              lastEstimatedBitrate = bitrate;
-            }
-          }),
+                const representation = fromBitrateCeil(_representations, nextBitrate) ||
+                  representations[0];
 
-          shareReplay()
-        );
-    }));
+                return {
+                  bitrate: bandwidthEstimate,
+                  manual: false,
+                  representation,
+                  adaptation: (representation as any).adaptation,
+                };
+
+              }),
+
+              tap(({ bitrate, adaptation }) => {
+                if (adaptation.id !== currentAdaptation.id) {
+                  adaptationsSubject$.next(adaptation);
+                  currentAdaptation = adaptation;
+                }
+                if (bitrate != null) {
+                  log.debug("ABR - calculated bitrate:", bitrate);
+                  lastEstimatedBitrate = bitrate;
+                }
+              }),
+
+              shareReplay()
+            );
+        }));
+      })
+    );
   }
 
   /**

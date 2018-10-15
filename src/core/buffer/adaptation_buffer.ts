@@ -23,7 +23,7 @@
  * download and push segments for a single Representation.
  */
 
-import objectAssign from "object-assign";
+// import objectAssign from "object-assign";
 import {
   concat as observableConcat,
   merge as observableMerge,
@@ -37,7 +37,7 @@ import {
   filter,
   map,
   mergeMap,
-  shareReplay,
+  // shareReplay,
   switchMap,
   tap,
 } from "rxjs/operators";
@@ -48,7 +48,8 @@ import Manifest, {
   Period,
   Representation,
 } from "../../manifest";
-import ABRManager, {
+// import ABRManager,
+import {
   IABREstimation,
 } from "../abr";
 import { IPrioritizedSegmentFetcher } from "../pipelines";
@@ -103,13 +104,13 @@ export default function AdaptationBuffer<T>(
   segmentFetcher : IPrioritizedSegmentFetcher<T>,
   wantedBufferAhead$ : Observable<number>,
   content : { manifest : Manifest; period : Period; adaptation : Adaptation },
-  abrManager : ABRManager,
+  abr$ : Observable<IABREstimation>,
   options : { manualBitrateSwitchingMode : "seamless"|"direct" }
 ) : Observable<IAdaptationBufferEvent<T>> {
   const directManualBitrateSwitching = options.manualBitrateSwitchingMode === "direct";
   const { manifest, period, adaptation } = content;
-  const abr$ = getABRForAdaptation(adaptation, abrManager, clock$)
-    .pipe(shareReplay());
+  // const abr$ = getABRForAdaptation(adaptation, abrManager, clock$)
+  //   .pipe(shareReplay());
 
   /**
    * Emit at each bitrate estimate done by the ABRManager
@@ -200,40 +201,40 @@ export default function AdaptationBuffer<T>(
   }
 }
 
-/**
- * Returns ABR Observable.
- * @param {Object} adaptation
- * @param {Object} abrManager
- * @param {Observable} abrBaseClock$
- * @returns {Observable}
- */
-function getABRForAdaptation(
-  adaptation : Adaptation,
-  abrManager : ABRManager,
-  abrBaseClock$ : Observable<IAdaptationBufferClockTick>
-) : Observable<IABREstimation> {
-  const representations = adaptation.representations;
+// /**
+//  * Returns ABR Observable.
+//  * @param {Object} adaptation
+//  * @param {Object} abrManager
+//  * @param {Observable} abrBaseClock$
+//  * @returns {Observable}
+//  */
+// function getABRForAdaptation(
+//   adaptation : Adaptation,
+//   abrManager : ABRManager,
+//   abrBaseClock$ : Observable<IAdaptationBufferClockTick>
+// ) : Observable<IABREstimation> {
+//   const representations = adaptation.representations;
 
-  /**
-   * Keep track of the current representation to add informations to the
-   * ABR clock.
-   * TODO isn't that a little bit ugly?
-   * @type {Object|null}
-   */
-  let currentRepresentation : Representation|null = null;
+//   /**
+//    * Keep track of the current representation to add informations to the
+//    * ABR clock.
+//    * TODO isn't that a little bit ugly?
+//    * @type {Object|null}
+//    */
+//   let currentRepresentation : Representation|null = null;
 
-  const abrClock$ = abrBaseClock$.pipe(
-    map((tick) => {
-      const bitrate = currentRepresentation ?
-        currentRepresentation.bitrate : undefined;
-      return objectAssign({ bitrate }, tick);
-    }));
+//   const abrClock$ = abrBaseClock$.pipe(
+//     map((tick) => {
+//       const bitrate = currentRepresentation ?
+//         currentRepresentation.bitrate : undefined;
+//       return objectAssign({ bitrate }, tick);
+//     }));
 
-  return abrManager.get$(adaptation.type, abrClock$, representations).pipe(
-    tap(({ representation }) => {
-      currentRepresentation = representation;
-    }));
-}
+//   return abrManager.get$(adaptation.type, abrClock$, representations).pipe(
+//     tap(({ representation }) => {
+//       currentRepresentation = representation;
+//     }));
+// }
 
 // Re-export RepresentationBuffer events used by the AdaptationBufferManager
 export {

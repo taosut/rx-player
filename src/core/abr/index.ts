@@ -22,7 +22,7 @@ import {
   mergeMap,
   takeUntil,
 } from "rxjs/operators";
-import { Representation } from "../../manifest";
+import { Adaptation } from "../../manifest";
 import { IBufferType } from "../source_buffers";
 import RepresentationChooser, {
   IABREstimation,
@@ -227,9 +227,11 @@ export default class ABRManager {
   public get$(
     type : IBufferType,
     clock$: Observable<IABRClockTick>,
-    representations: Representation[] = []
+    adaptations: Adaptation[] = [],
+    initialAdaptation?: Adaptation
   ) : Observable<IABREstimation> {
-    return this._lazilyCreateChooser(type).get$(clock$, representations);
+    return this._lazilyCreateChooser(type)
+      .get$(clock$, adaptations, initialAdaptation);
   }
 
   /**

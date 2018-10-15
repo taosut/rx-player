@@ -15,8 +15,9 @@
  */
 
 import { expect } from "chai";
-import { Representation } from "../../../manifest";
+// import { Representation } from "../../../manifest";
 import _fromBitrateCeil from "../fromBitrateCeil";
+import { IRepresentationEnhanced } from "../representation_chooser";
 
 describe("ABR - fromBitrateCeil", () => {
   const fakeReps = [
@@ -28,7 +29,7 @@ describe("ABR - fromBitrateCeil", () => {
 
   describe("filterByBitrate", () => {
     it("should return the best representation when the bitrate given is Infinity", () => {
-      expect(_fromBitrateCeil(fakeReps as Representation[], Infinity))
+      expect(_fromBitrateCeil(fakeReps as IRepresentationEnhanced[], Infinity))
         .to.equal(fakeReps[fakeReps.length - 1]);
     });
 
@@ -36,7 +37,7 @@ describe("ABR - fromBitrateCeil", () => {
     it("should return the best representation when the bitrate given is superior to the maximum", () => {
     /* tslint:enable max-line-length */
       expect(_fromBitrateCeil(
-        fakeReps as Representation[],
+        fakeReps as IRepresentationEnhanced[],
         fakeReps[fakeReps.length - 1].bitrate + 1)
       ).to.equal(fakeReps[fakeReps.length - 1]);
     });
@@ -45,20 +46,21 @@ describe("ABR - fromBitrateCeil", () => {
     it("should return the best representation when the bitrate given is equal to the maximum", () => {
     /* tslint:enable max-line-length */
       expect(_fromBitrateCeil(
-        fakeReps as Representation[],
+        fakeReps as IRepresentationEnhanced[],
         fakeReps[fakeReps.length - 1].bitrate)
       ).to.equal(fakeReps[fakeReps.length - 1]);
     });
 
     it("should undefined if the bitrate given is inferior to the minimum", () => {
-      expect(_fromBitrateCeil(fakeReps as Representation[], fakeReps[0].bitrate - 1))
+      expect(_fromBitrateCeil(
+        fakeReps as IRepresentationEnhanced[], fakeReps[0].bitrate - 1))
         .to.equal(undefined);
     });
 
     it("should choose the closest lower representation for a given bitrate", () => {
       const bitrate = (fakeReps[2].bitrate - fakeReps[1].bitrate) / 2 +
         fakeReps[1].bitrate;
-      expect(_fromBitrateCeil(fakeReps as Representation[], bitrate))
+      expect(_fromBitrateCeil(fakeReps as IRepresentationEnhanced[], bitrate))
         .to.equal(fakeReps[1]);
     });
   });

@@ -15,7 +15,8 @@
  */
 
 import arrayFindIndex from "array-find-index";
-import { Representation } from "../../manifest";
+// import { Representation } from "../../manifest";
+import { IRepresentationEnhanced } from "./representation_chooser";
 
 /**
  * Get only representations lower than a given bitrate.
@@ -24,9 +25,9 @@ import { Representation } from "../../manifest";
  * @returns {Array.<Object>}
  */
 export default function filterByBitrate(
-  representations : Representation[],
+  representations : IRepresentationEnhanced[],
   bitrate : number
-) : Representation[] {
+) : IRepresentationEnhanced[] {
   const firstSuperiorBitrate = arrayFindIndex(
     representations,
     (representation) => representation.bitrate > bitrate

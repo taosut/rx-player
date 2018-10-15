@@ -32,6 +32,7 @@ import {
   mapTo,
   mergeMap,
   share,
+  shareReplay,
   switchMap,
   take,
   takeUntil,
@@ -48,7 +49,7 @@ import arrayIncludes from "../../utils/array-includes";
 import InitializationSegmentCache from "../../utils/initialization_segment_cache";
 import SortedList from "../../utils/sorted_list";
 import WeakMapMemory from "../../utils/weak_map_memory";
-import ABRManager from "../abr";
+import ABRManager, { IABREstimation } from "../abr";
 import {
   IPipelineOptions,
   SegmentPipelinesManager,
@@ -78,6 +79,8 @@ import {
   IPeriodBufferEvent,
   IPeriodBufferManagerEvent,
 } from "./types";
+
+import objectAssign from "object-assign";
 
 export type IPeriodBufferManagerClockTick = IAdaptationBufferClockTick;
 
@@ -487,63 +490,119 @@ export default function PeriodBufferManager(
   function createPeriodBuffer(
     bufferType : IBufferType,
     period: Period,
-    adaptation$ : Observable<Adaptation|null>
+    manualAdaptation$ : Observable<Adaptation|null>
   ) : Observable<IPeriodBufferEvent> {
-    return adaptation$.pipe(switchMap((adaptation) => {
-      if (adaptation == null) {
-        log.info(`set no ${bufferType} Adaptation`, period);
-        let cleanBuffer$ : Observable<null>;
 
-        if (sourceBufferManager.has(bufferType)) {
-          log.info(`clearing previous ${bufferType} SourceBuffer`);
-          const _qSourceBuffer = sourceBufferManager.get(bufferType);
-          cleanBuffer$ = _qSourceBuffer
-            .removeBuffer(period.start, period.end || Infinity)
-            .pipe(mapTo(null));
-        } else {
-          cleanBuffer$ = observableOf(null);
-        }
+    return manualAdaptation$.pipe(
+      take(1), // XXX TODO Do we have to wait for first event ?
+      mergeMap((initialAdaptation) => {
+        let currentAdaptation: Adaptation|null = initialAdaptation;
+        let currentBitrate: number|undefined;
 
-        return observableConcat<IPeriodBufferEvent>(
-          cleanBuffer$.pipe(mapTo(EVENTS.adaptationChange(bufferType, null, period))),
-          createFakeBuffer(clock$, wantedBufferAhead$, bufferType, { manifest, period })
+        const abrClock$ = clock$.pipe(
+          map((clock) => {
+            return objectAssign({}, clock, { bitrate: currentBitrate });
+          })
         );
-      }
 
-      log.info(`updating ${bufferType} adaptation`, adaptation, period);
+        const abr$ =
+          arrayIncludes(["video", "audio"], bufferType) ? abrManager
+            .get$(
+              bufferType,
+              abrClock$,
+              manifest.adaptations[bufferType],
+              initialAdaptation != null ? initialAdaptation : undefined
+            )
+            .pipe(
+              shareReplay()
+            ) : EMPTY;
 
-      const newBuffer$ = clock$.pipe(
-        take(1),
-        mergeMap<IPeriodBufferManagerClockTick, IPeriodBufferEvent>((tick) => {
-          const qSourceBuffer = createOrReuseQueuedSourceBuffer(bufferType, adaptation);
-          const strategy = getAdaptationSwitchStrategy(
-            qSourceBuffer.getBuffered(), period, bufferType, tick);
+        const abrAdaptations$ = abr$.pipe(
+          filter(({ representation, adaptation }) => {
+            currentBitrate = representation.bitrate;
+            if (
+              !currentAdaptation ||
+              adaptation.id !== currentAdaptation.id
+            ) {
+              currentAdaptation = adaptation;
+              return true;
+            }
+            return false;
+          }),
+          map(() => {
+            return currentAdaptation;
+          })
+        );
 
-          if (strategy.type === "reload-stream") {
-            return observableOf(EVENTS.needsStreamReload());
+        const adaptation$ = observableMerge(
+          manualAdaptation$,
+          abrAdaptations$
+        );
+
+        return adaptation$.pipe(switchMap((adaptation) => {
+          if (adaptation == null) {
+            log.info(`set no ${bufferType} Adaptation`, period);
+            let cleanBuffer$ : Observable<null>;
+
+            if (sourceBufferManager.has(bufferType)) {
+              log.info(`clearing previous ${bufferType} SourceBuffer`);
+              const _qSourceBuffer = sourceBufferManager.get(bufferType);
+              cleanBuffer$ = _qSourceBuffer
+                .removeBuffer(period.start, period.end || Infinity)
+                .pipe(mapTo(null));
+            } else {
+              cleanBuffer$ = observableOf(null);
+            }
+
+            return observableConcat<IPeriodBufferEvent>(
+              cleanBuffer$.pipe(mapTo(EVENTS.adaptationChange(bufferType, null, period))),
+              createFakeBuffer(
+                clock$, wantedBufferAhead$, bufferType, { manifest, period })
+            );
           }
 
-          const cleanBuffer$ = strategy.type === "clean-buffer" ?
-            observableConcat(
-              ...strategy.value.map(({ start, end }) =>
-                qSourceBuffer.removeBuffer(start, end)
-              )).pipe(ignoreElements()) : EMPTY;
+          log.info(`updating ${bufferType} adaptation`, adaptation, period);
 
-          const bufferGarbageCollector$ = garbageCollectors.get(qSourceBuffer);
-          const adaptationBuffer$ = createAdaptationBuffer(
-            bufferType, period, adaptation, qSourceBuffer);
+          const newBuffer$ = clock$.pipe(
+            take(1),
+            mergeMap<IPeriodBufferManagerClockTick, IPeriodBufferEvent>((tick) => {
+              const qSourceBuffer =
+                createOrReuseQueuedSourceBuffer(bufferType, adaptation);
+              const strategy = getAdaptationSwitchStrategy(
+                qSourceBuffer.getBuffered(), period, bufferType, tick);
 
-          return observableConcat(
-            cleanBuffer$,
-            observableMerge(adaptationBuffer$, bufferGarbageCollector$)
+              if (strategy.type === "reload-stream") {
+                return observableOf(EVENTS.needsStreamReload());
+              }
+
+              const cleanBuffer$ = strategy.type === "clean-buffer" ?
+                observableConcat(
+                  ...strategy.value.map(({ start, end }) =>
+                    qSourceBuffer.removeBuffer(start, end)
+                  )).pipe(ignoreElements()) : EMPTY;
+
+              const bufferGarbageCollector$ = garbageCollectors.get(qSourceBuffer);
+              const adaptationBuffer$ = createAdaptationBuffer(
+                bufferType,
+                period,
+                adaptation,
+                qSourceBuffer,
+                abr$
+              );
+
+              return observableConcat(
+                cleanBuffer$,
+                observableMerge(adaptationBuffer$, bufferGarbageCollector$)
+              );
+            }));
+
+          return observableConcat<IPeriodBufferEvent>(
+            observableOf(EVENTS.adaptationChange(bufferType, adaptation, period)),
+            newBuffer$
           );
         }));
-
-      return observableConcat<IPeriodBufferEvent>(
-        observableOf(EVENTS.adaptationChange(bufferType, adaptation, period)),
-        newBuffer$
-      );
-    }));
+      })
+    );
   }
 
   /**
@@ -575,7 +634,8 @@ export default function PeriodBufferManager(
     bufferType : IBufferType,
     period: Period,
     adaptation : Adaptation,
-    qSourceBuffer : QueuedSourceBuffer<T>
+    qSourceBuffer : QueuedSourceBuffer<T>,
+    abr$ : Observable<IABREstimation>
   ) : Observable<IAdaptationBufferEvent<T>|IBufferWarningEvent> {
     const segmentBookkeeper = segmentBookkeepers.get(qSourceBuffer);
     const pipelineOptions = getPipelineOptions(
@@ -589,7 +649,7 @@ export default function PeriodBufferManager(
       pipeline,
       wantedBufferAhead$,
       { manifest, period, adaptation },
-      abrManager,
+      abr$,
       options
     ).pipe(catchError((error : Error) => {
       // non native buffer should not impact the stability of the

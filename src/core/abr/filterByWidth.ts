@@ -15,7 +15,8 @@
  */
 
 import arrayFind from "array-find";
-import { Representation } from "../../manifest";
+// import { Representation } from "../../manifest";
+import { IRepresentationEnhanced } from "./representation_chooser";
 
 /**
  * Filter representations based on their width:
@@ -26,9 +27,9 @@ import { Representation } from "../../manifest";
  * @returns {Array.<Object>}
  */
 export default function filterByWidth(
-  representations : Representation[],
+  representations : IRepresentationEnhanced[],
   width : number
-) : Representation[] {
+) : IRepresentationEnhanced[] {
   const sortedRepsByWidth = representations
     .slice() // clone
     .sort((a, b) => (a.width || 0) - (b.width || 0));
