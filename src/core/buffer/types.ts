@@ -23,6 +23,7 @@ import {
   Representation,
 } from "../../manifest";
 import { IBufferType } from "../source_buffers";
+import { IBufferInbandStreamEvent } from "./representation_buffer";
 
 // Emitted after a new segment has been added to the SourceBuffer
 export interface IBufferEventAddedSegment<T> {
@@ -82,7 +83,8 @@ export type IRepresentationBufferStateEvent =
 // Events emitted by the Buffer
 export type IRepresentationBufferEvent<T> =
   IBufferEventAddedSegment<T> |
-  IRepresentationBufferStateEvent;
+  IRepresentationBufferStateEvent |
+  IBufferInbandStreamEvent;
 
 // Emitted as new bitrate estimations are done
 export interface IBitrateEstimationChangeEvent {

@@ -58,6 +58,7 @@ import Manifest, {
 import SimpleSet from "../../utils/simple_set";
 import {
   IFetchedSegment,
+  IInbandStreamEvent,
   IPrioritizedSegmentFetcher,
 } from "../pipelines";
 import {
@@ -78,6 +79,11 @@ import {
   IBufferStateFull,
   IRepresentationBufferEvent,
 } from "./types";
+
+export interface IBufferInbandStreamEvent {
+  type: "inband-stream-event";
+  value: IInbandStreamEvent;
+}
 
 // Item emitted by the Buffer's clock$
 export interface IRepresentationBufferClockTick {
@@ -122,6 +128,7 @@ interface ISegmentObject<T> {
   segmentInfos : ISegmentInfos|null; // informations about the segment's start
                                      // and duration
   segmentOffset : number; // Offset to add to the segment at decode time
+  segmentEvent? : IInbandStreamEvent;
 }
 
 // Informations about a loaded Segment
@@ -323,12 +330,34 @@ export default function RepresentationBuffer<T>({
     )
   );
 
+  /**
+   * Returns stream events.
+   * @param data
+   */
+  function handleInbandStreamEvent(
+    value: ISegmentObject<T>
+  ): Observable<IBufferInbandStreamEvent> {
+    const { segmentEvent } = value;
+    if (segmentEvent) {
+      return observableOf({
+        type: "inband-stream-event" as "inband-stream-event",
+        value: segmentEvent,
+      });
+    }
+    return EMPTY;
+  }
+
   // Buffer Queue:
   //   - download every segments queued sequentially
   //   - append them to the SourceBuffer
   const bufferQueue$ = startQueue$.pipe(
     switchMap(() => downloadQueue.length ? loadSegmentsFromQueue() : EMPTY),
-    mergeMap(appendSegment)
+    mergeMap((args) => {
+      return observableConcat(
+        handleInbandStreamEvent(args.value),
+        appendSegment(args)
+      );
+    })
   );
 
   return observableMerge(status$, bufferQueue$).pipe(share());

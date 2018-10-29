@@ -32,6 +32,7 @@ import applyPrioritizerToSegmentFetcher, {
 import ObservablePrioritizer from "./prioritizer";
 import createSegmentFetcher, {
   IFetchedSegment,
+  IInbandStreamEvent,
 } from "./segment_fetcher";
 
 /**
@@ -127,4 +128,5 @@ export {
   IPipelineLoaderOptions as IPipelineOptions,
   IPrioritizedSegmentFetcher,
   IFetchedSegment,
+  IInbandStreamEvent,
 };

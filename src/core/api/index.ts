@@ -160,7 +160,8 @@ type PLAYER_EVENT_STRINGS =
   "nativeTextTracksChange" |
   "manifestChange" |
   "manifestUpdate" |
-  "periodChange";
+  "periodChange" |
+  "inbandStreamEvent";
 
 /**
  * @class Player
@@ -1889,6 +1890,9 @@ class Player extends EventEmitter<PLAYER_EVENT_STRINGS, any> {
       this.trigger(type + "Change" as PLAYER_EVENT_STRINGS, value);
     }
   }
+  private _priv_onInbandStreamEvent(value : any) : void {
+    this.trigger("inbandStreamEvent", value);
+  }
 
   /**
    * Triggered each time the Stream Observable emits.
@@ -1929,6 +1933,9 @@ class Player extends EventEmitter<PLAYER_EVENT_STRINGS, any> {
         break;
       case "warning":
         this._priv_onStreamWarning(streamInfos.value);
+        break;
+      case "inband-stream-event":
+        this._priv_onInbandStreamEvent(streamInfos.value);
         break;
       case "added-segment":
         if (!this._priv_contentInfos) {
