@@ -42,6 +42,7 @@ import filterByWidth from "./filter_by_width";
 import fromBitrateCeil from "./from_bitrate_ceil";
 
 const {
+  // ABR_MINIMUM_TOTAL_BYTES,
   ABR_REGULAR_FACTOR,
   ABR_STARVATION_DURATION_DELTA,
   ABR_STARVATION_FACTOR,
@@ -60,6 +61,10 @@ export interface IABREstimation {
                     // immediately
                     // False if we can chose to wait for the current
                     // download(s) to finish before switching.
+  // confident : boolean; // True if this Representation choice is a stable
+  //                      // choice.
+  //                      // False if it's a quick default estimation in waiting
+  //                      // for real data.
 }
 
 interface IRepresentationChooserClockTick {
@@ -348,7 +353,7 @@ export default class RepresentationChooser {
   private readonly _throttle$ : Observable<number>|undefined;
   private readonly estimator : BandwidthEstimator;
   private readonly _initialBitrate : number;
-  private readonly _reEstimate$ : Subject<void>;
+  private readonly _triggerEstimation$ : Subject<void>;
   private _currentRequests : Partial<Record<string, IRequestInfo>>;
 
   /**
@@ -374,7 +379,7 @@ export default class RepresentationChooser {
 
     this._limitWidth$ = options.limitWidth$;
     this._throttle$ = options.throttle$;
-    this._reEstimate$ = new Subject<void>();
+    this._triggerEstimation$ = new Subject<void>();
   }
 
   /**
@@ -395,6 +400,7 @@ export default class RepresentationChooser {
         representation: representations[0],
         manual: false,
         urgent: true,
+        // confident: true,
       });
     }
 
@@ -433,6 +439,7 @@ export default class RepresentationChooser {
             representations[0],
           manual: true,
           urgent: true, // a manual bitrate switch should happen immediately
+          // confident: true,
         });
       }
 
@@ -442,9 +449,10 @@ export default class RepresentationChooser {
         clock$,
         maxAutoBitrate$,
         deviceEvents$,
-        this._reEstimate$.pipe(startWith(null))
+        this._triggerEstimation$.pipe(startWith(null))
       ).pipe(
         map(([ clock, maxAutoBitrate, deviceEvents ]) => {
+          // let confident : boolean = false;
           let newBitrateCeil; // bitrate ceil for the chosen Representation
           let bandwidthEstimate;
           const { bufferGap, currentTime, duration } = clock;
@@ -482,7 +490,11 @@ export default class RepresentationChooser {
 
           // if newBitrateCeil is not yet defined, do the normal estimation
           if (newBitrateCeil == null) {
-            bandwidthEstimate = this.estimator.getEstimate();
+            const estimations = this.estimator.getEstimate();
+            // if (estimations.bytesSampled >= ABR_MINIMUM_TOTAL_BYTES) {
+            //   confident = true;
+            // }
+            bandwidthEstimate = estimations.bitrate;
 
             let nextEstimate;
             if (bandwidthEstimate != null) {
@@ -524,6 +536,7 @@ export default class RepresentationChooser {
             representation: chosenRepresentation,
             manual: false,
             urgent,
+            // confident
           };
 
         }),
@@ -549,7 +562,7 @@ export default class RepresentationChooser {
   public addEstimate(duration : number, size : number) : void {
     if (duration != null && size != null) {
       this.estimator.addSample(duration, size);
-      this._reEstimate$.next();
+      this._triggerEstimation$.next();
     }
   }
 
@@ -618,8 +631,8 @@ export default class RepresentationChooser {
   public dispose() : void {
     this._dispose$.next();
     this._dispose$.complete();
-    this._reEstimate$.next();
-    this._reEstimate$.complete();
+    this._triggerEstimation$.next();
+    this._triggerEstimation$.complete();
     this.manualBitrate$.complete();
     this.maxAutoBitrate$.complete();
   }

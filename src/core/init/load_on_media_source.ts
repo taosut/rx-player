@@ -116,6 +116,8 @@ export default function createMediaSourceLoader({
     initialTime : number,
     autoPlay : boolean
   ) {
+    console.time("manifest");
+
     // TODO Update the duration if it evolves?
     const duration = manifest.getDuration();
     setDurationToMediaSource(mediaSource, duration == null ?  Infinity : duration);
@@ -174,9 +176,20 @@ export default function createMediaSourceLoader({
               mediaElement.currentTime = evt.value.nextTime;
             }
             return EMPTY;
-          default:
-            return observableOf(evt);
+
+            case "bitrateEstimationChange": {
+              const { type } = evt.value;
+              const qsb = sourceBuffersManager.get(type);
+              if (qsb == null) {
+                log.error("StreamLoader: representationChange event received" +
+                  " but no SourceBuffer of that type was found.");
+              } else if (qsb.isLocked()) {
+                qsb.unlock();
+              }
+              break;
+            }
         }
+        return observableOf(evt);
       })
     );
 
@@ -233,8 +246,25 @@ function createNativeSourceBuffersForPeriod(
         adaptations[0].representations : [];
       if (representations.length) {
         const codec = representations[0].getMimeTypeString();
-        sourceBuffersManager.createSourceBuffer(bufferType, codec);
+        // sourceBufferManager.createSourceBuffer(bufferType, codec);
+        // XXX TODO
+        const queuedSourceBuffer =
+          sourceBuffersManager.createSourceBuffer(bufferType, codec);
+        if (bufferType === "video") {
+          queuedSourceBuffer.lock();
+        }
+        // if (shouldLock) {
+        //   queuedSourceBuffer.lock();
+        // }
       }
     }
   });
+
+  // window.ooops =  function() {
+  //   Object.keys(period.adaptations).forEach(bufferType => {
+  //     if (SourceBufferManager.isNative(bufferType)) {
+  //       sourceBufferManager.get(bufferType).unlock();
+  //     }
+  //   });
+  // };
 }
