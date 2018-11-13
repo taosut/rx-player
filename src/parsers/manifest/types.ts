@@ -62,11 +62,23 @@ export interface IParsedPeriod {
   end? : number;
 }
 
+// Period for which the adaptations are not yet known
+export interface IParsedPartialPeriod {
+  // required
+  id : string;
+  start : number;
+
+  // optional
+  adaptations? : IParsedAdaptations;
+  duration? : number;
+  end? : number;
+}
+
 export interface IParsedManifest {
   // required
   id: string;
   isLive : boolean;
-  periods: IParsedPeriod[];
+  periods: Array<IParsedPeriod|IParsedPartialPeriod>;
   transportType: string; // "smooth", "dash" etc.
 
   // optional

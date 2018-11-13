@@ -18,8 +18,8 @@ import { Subject } from "rxjs";
 import { ICustomError } from "../../errors";
 import {
   Adaptation,
+  IFetchedPeriod,
   ISegment,
-  Period,
   Representation,
 } from "../../manifest";
 import { IBufferType } from "../source_buffers";
@@ -50,7 +50,7 @@ const EVENTS = {
     };
   },
 
-  activePeriodChanged(period : Period) : IActivePeriodChangedEvent {
+  activePeriodChanged(period : IFetchedPeriod) : IActivePeriodChangedEvent {
     return {
       type : "activePeriodChanged",
       value : {
@@ -62,7 +62,7 @@ const EVENTS = {
   adaptationChange(
     bufferType : IBufferType,
     adaptation : Adaptation|null,
-    period : Period
+    period : IFetchedPeriod
   ) : IAdaptationChangeEvent {
     return {
       type: "adaptationChange",
@@ -144,7 +144,7 @@ const EVENTS = {
 
   periodBufferReady(
     type : IBufferType,
-    period : Period,
+    period : IFetchedPeriod,
     adaptation$ : Subject<Adaptation|null>
   ) : IPeriodBufferReadyEvent {
     return {
@@ -159,7 +159,7 @@ const EVENTS = {
 
   periodBufferCleared(
     type : IBufferType,
-    period : Period
+    period : IFetchedPeriod
   ) : IPeriodBufferClearedEvent {
     return {
       type: "periodBufferCleared",
@@ -172,7 +172,7 @@ const EVENTS = {
 
   representationChange(
     type : IBufferType,
-    period : Period,
+    period : IFetchedPeriod,
     representation : Representation
   ) : IRepresentationChangeEvent {
     return {

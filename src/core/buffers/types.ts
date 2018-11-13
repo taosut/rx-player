@@ -18,8 +18,8 @@ import { Subject } from "rxjs";
 import { ICustomError } from "../../errors";
 import {
   Adaptation,
+  IFetchedPeriod,
   ISegment,
-  Period,
   Representation,
 } from "../../manifest";
 import { IBufferType } from "../source_buffers";
@@ -98,7 +98,7 @@ export interface IRepresentationChangeEvent {
   type : "representationChange";
   value : {
     type : IBufferType;
-    period : Period;
+    period : IFetchedPeriod;
     representation : Representation|null;
   };
 }
@@ -115,7 +115,7 @@ export interface IAdaptationChangeEvent {
   type : "adaptationChange";
   value : {
     type : IBufferType;
-    period : Period;
+    period : IFetchedPeriod;
     adaptation : Adaptation|null;
   };
 }
@@ -124,7 +124,7 @@ export interface IAdaptationChangeEvent {
 export interface IActivePeriodChangedEvent {
   type: "activePeriodChanged";
   value : {
-    period: Period;
+    period: IFetchedPeriod;
   };
 }
 
@@ -133,7 +133,7 @@ export interface IPeriodBufferReadyEvent {
   type : "periodBufferReady";
   value : {
     type : IBufferType;
-    period : Period;
+    period : IFetchedPeriod;
     adaptation$ : Subject<Adaptation|null>;
   };
 }
@@ -144,7 +144,7 @@ export interface IPeriodBufferClearedEvent {
   type : "periodBufferCleared";
   value : {
     type : IBufferType;
-    period : Period;
+    period : IFetchedPeriod;
   };
 }
 
