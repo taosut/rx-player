@@ -60,6 +60,12 @@ export interface IManifestLoaderArguments {
   url : string; // URL of the concerned manifest
 }
 
+// arguments for the period pipeline
+export interface IPeriodLoaderArguments {
+  period : Period;
+  manifest : Manifest;
+}
+
 // loader argument for every other pipelines
 export interface ISegmentLoaderArguments {
   manifest : Manifest; // Manifest related to this segment
@@ -134,6 +140,8 @@ export interface IManifestParserArguments<T, U> {
   scheduleRequest : (request : () => Observable<U>) => Observable<U>;
 }
 
+export type IPeriodParserArguments<T, U> = IManifestParserArguments<T, U>;
+
 export interface ISegmentParserArguments<T> {
   response : ILoaderResponseValue<T>; // Response from the loader
   init? : ISegmentTimingInfos; // Infos about the initialization segment of the
@@ -153,7 +161,13 @@ export interface IManifestParserResult {
   url? : string; // final URL of the manifest
 }
 
+export interface IPeriodParserResult {
+  periods : Period[];
+  urls : Array<string|undefined>;
+}
+
 export type IManifestParserObservable = Observable<IManifestParserResult>;
+export type IPeriodParserObservable = Observable<IPeriodParserResult>;
 
 export type SegmentParserObservable = Observable<{
   segmentData : Uint8Array|ArrayBuffer|null; // Data to decode
@@ -216,6 +230,13 @@ export interface ITransportManifestPipeline {
     IManifestParserObservable;
 }
 
+interface ITransportPeriodPipeline {
+  loader : (x : IPeriodLoaderArguments) =>
+    ILoaderObservable<string>;
+  parser : (x : IPeriodParserArguments<string, string>) =>
+    IPeriodParserObservable;
+}
+
 interface ITransportSegmentPipelineBase<T> {
   loader : (x : ISegmentLoaderArguments) => ILoaderObservable<T>;
   parser : (x : ISegmentParserArguments<T>) => SegmentParserObservable;
@@ -251,10 +272,12 @@ export type ITransportSegmentPipeline =
 
 export type ITransportPipeline =
   ITransportManifestPipeline |
+  ITransportPeriodPipeline |
   ITransportSegmentPipeline;
 
 export interface ITransportPipelines {
   manifest : ITransportManifestPipeline;
+  period? : ITransportPeriodPipeline;
   audio : ITransportAudioSegmentPipeline;
   video : ITransportVideoSegmentPipeline;
   text : ITransportTextSegmentPipeline;
@@ -269,7 +292,7 @@ interface IParsedKeySystem {
 export interface ITransportOptions {
   // every transports
   segmentLoader? : CustomSegmentLoader;
-  manifestLoader?: CustomManifestLoader;
+  manifestLoader? : CustomManifestLoader;
 
   // smooth only
   suggestedPresentationDelay? : number;
