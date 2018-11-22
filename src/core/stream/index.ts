@@ -65,13 +65,15 @@ import getInitialTime, {
 } from "./get_initial_time";
 import createMediaErrorManager from "./media_error_manager";
 import StreamLoader, {
-  IStreamLoaderEvent,
+  IStreamLoaderEvent
 } from "./stream_loader";
 import {
   IManifestReadyEvent,
   IManifestUpdateEvent,
   IReloadingStreamEvent,
   IStreamClockTick,
+  IStreamPausedEvent,
+  IStreamPlayingEvent,
   IStreamWarningEvent,
 } from "./types";
 
@@ -129,6 +131,8 @@ export interface IStreamOptions {
 export type IStreamEvent =
   IManifestReadyEvent |
   IStreamLoaderEvent |
+  IStreamPlayingEvent |
+  IStreamPausedEvent |
   IEMEManagerEvent |
   IReloadingStreamEvent |
   IStreamWarningEvent;
