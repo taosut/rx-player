@@ -20,6 +20,7 @@ import {
   Adaptation,
   IFetchedPeriod,
   ISegment,
+  Period,
   Representation,
 } from "../../manifest";
 import { IBufferType } from "../source_buffers";
@@ -128,7 +129,17 @@ export interface IActivePeriodChangedEvent {
   };
 }
 
-// a new PeriodBuffer is ready, waiting for an adaptation/track choice.
+// Begin to load a Period
+export interface ILoadingPeriod {
+  type : "loading-period";
+  value : {
+    type : IBufferType;
+    period : Period;
+  };
+}
+
+// a new PeriodBuffer is ready (with its corresponding Period loaded),
+// waiting for an adaptation/track choice.
 export interface IPeriodBufferReadyEvent {
   type : "periodBufferReady";
   value : {
@@ -185,6 +196,7 @@ export type IPeriodBufferEvent =
 // Events coming from function(s) managing multiple PeriodBuffers.
 export type IMultiplePeriodBuffersEvent =
   IPeriodBufferEvent |
+  ILoadingPeriod |
   IPeriodBufferClearedEvent |
   ICompletedBufferEvent;
 

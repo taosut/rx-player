@@ -20,6 +20,7 @@ import {
   Adaptation,
   IFetchedPeriod,
   ISegment,
+  Period,
   Representation,
 } from "../../manifest";
 import { IBufferType } from "../source_buffers";
@@ -35,6 +36,7 @@ import {
   IBufferWarningEvent,
   ICompletedBufferEvent,
   IEndOfStreamEvent,
+  ILoadingPeriod,
   INeedsMediaSourceReload,
   IPeriodBufferClearedEvent,
   IPeriodBufferReadyEvent,
@@ -140,6 +142,19 @@ const EVENTS = {
 
   needsMediaSourceReload() : INeedsMediaSourceReload {
     return { type: "needs-media-source-reload", value: undefined };
+  },
+
+  loadingPeriod(
+    type : IBufferType,
+    period : Period
+  ) : ILoadingPeriod {
+    return {
+      type: "loading-period",
+      value: {
+        type,
+        period,
+      },
+    };
   },
 
   periodBufferReady(

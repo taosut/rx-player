@@ -396,6 +396,32 @@ export default class Manifest extends EventEmitter<"manifestUpdate", null> {
     this.trigger("manifestUpdate", null);
   }
 
+  // XXX TODO less smart
+  public updatePeriods(
+    previousPeriod : Period,
+    fetchedPeriods : IFetchedPeriod[]
+  ) : Manifest {
+    const periodGroupId = previousPeriod.groupId;
+    const currentPeriods = this.periods;
+    for (let i = 0; i < currentPeriods.length; i++) {
+      const currentPeriod = currentPeriods[i];
+      if (currentPeriod.groupId === periodGroupId) {
+        if (!currentPeriod.isFetched()) {
+          this.periods.splice(i, 1, ...fetchedPeriods);
+          return this;
+        } else {
+          for (let j = 0; j < fetchedPeriods.length; j++) {
+            const fetchedPeriod = fetchedPeriods[j];
+            if (fetchedPeriod.id === currentPeriod.id) {
+              updatePeriodInPlace(currentPeriod, fetchedPeriod);
+            }
+          }
+        }
+      }
+    }
+    return this;
+  }
+
   /**
    * Get minimum position currently defined by the Manifest, in seconds.
    * @returns {number}

@@ -44,10 +44,14 @@ export interface IPeriodArguments {
   duration? : number; // duration of the Period, in seconds.
                       // Can be undefined for a still-running one.
   adaptations? : IAdaptationsArguments; // "Tracks" in that Period.
+                                        // undefined for "partial" Periods.
 }
 
+// Interface which a Period implements.
 export interface IPartialPeriod {
+  groupId : string;
   id : string;
+  isUpToDate : boolean;
   parsingErrors : Array<Error|ICustomError>;
   start : number;
   duration? : number;
@@ -59,6 +63,8 @@ export interface IPartialPeriod {
   isFetched() : boolean;
 }
 
+// Interface of a `fetched` (or `non-partial`) Period, which is a subset of an
+// IPartialPeriod.
 export interface IFetchedPeriod extends IPartialPeriod {
   adaptations : IManifestAdaptations;
   isFetched() : true;
@@ -68,6 +74,18 @@ export interface IFetchedPeriod extends IPartialPeriod {
  * Class representing a single `Period` of the Manifest.
  * A Period contains every informations about the content available for a
  * specific period in time.
+ *
+ * A Period can be `fetched` or `partial`:
+ *   - `partial` periods need to be fetched before all informations on them
+ *     are known. We encourage to do this lazily (only when needed) to save
+ *     ressources.
+ *   - `fetched` periods have all informations you need.
+ *
+ * Note that a `fetched` period can still be not up-to-date with the Manifest
+ * (e.g. when the latter has been refreshed and not the former).
+ * This is reflected by the `isUpToDate` property.
+ * When that's the case, you're encouraged to re-fetch and update (through the
+ * corresponding Manifest's method) that Period when needed.
  * @class Period
  */
 export default class Period implements IPartialPeriod {
@@ -78,8 +96,19 @@ export default class Period implements IPartialPeriod {
   public readonly id : string;
 
   /**
+   * ID identifying the Group this Period is in:
+   *   - For Periods which were originally a `partial` Period, this corresponds
+   *     to the `partial` Period's Id
+   *   - For Periods which never were `partial`, this should be the same as its
+   *     regular ID.
+   * @type {string}
+   */
+  public readonly groupId : string;
+
+  /**
    * Every 'Adaptation' in that Period, per type of Adaptation.
-   * @type {Object}
+   * Can be undefined for Period which are not fetched yet.
+   * @type {Object|undefined}
    */
   public adaptations? : IManifestAdaptations;
 
@@ -104,6 +133,15 @@ export default class Period implements IPartialPeriod {
   public end? : number;
 
   /**
+   * Whether this Period is up-to-date with the parent Manifest:
+   *   - if true, every informations here is up-to-date
+   *   - if false, this Period still contains informations indicated in a
+   *     previous version of the Manifest and needs to be refreshed.
+   * @type {Boolean}
+   */
+  public isUpToDate : boolean;
+
+  /**
    * Array containing every errors that happened when the Period has been
    * created, in the order they have happened.
    * @type {Array.<Error>}
@@ -120,7 +158,7 @@ export default class Period implements IPartialPeriod {
     representationFilter? : IRepresentationFilter
   ) {
     this.parsingErrors = [];
-    this.id = args.id;
+    this.id = this.groupId = args.id;
 
     const { adaptations } = args;
     if (adaptations != null) {
@@ -175,9 +213,17 @@ export default class Period implements IPartialPeriod {
     if (this.duration != null && this.start != null) {
       this.end = this.start + this.duration;
     }
+
+    this.isUpToDate = true;
   }
 
   /**
+   * If true, this Period should contain every Adaptations and timings
+   * informations.
+   * If false, this is still a `partial` Period, and thus we need to fetch the
+   * corresponding URL to obtain all its informations.
+   * /!\ a single non-fetched Period can correspond to multiple fetched ones.
+   * The inverse is not true.
    * @returns {Boolean}
    */
   isFetched() : this is IFetchedPeriod {
@@ -187,6 +233,8 @@ export default class Period implements IPartialPeriod {
   /**
    * Returns every `Adaptations` (or `tracks`) linked to that Period, in an
    * Array.
+   * Note that this array is empty for `partial` Periods (Period which are not
+   * yet fetched).
    * @returns {Array.<Object>}
    */
   getAdaptations() : Adaptation[] {
@@ -205,6 +253,8 @@ export default class Period implements IPartialPeriod {
   /**
    * Returns every `Adaptations` (or `tracks`) linked to that Period for a
    * given type.
+   * Note that this array is empty for `partial` Periods (Period which are not
+   * yet fetched).
    * @param {string} adaptationType
    * @returns {Array.<Object>}
    */

@@ -16,6 +16,7 @@
 
 import {
   concat as observableConcat,
+  defer as observableDefer,
   EMPTY,
   merge as observableMerge,
   Observable,
@@ -29,6 +30,8 @@ import {
   map,
   mergeMap,
   share,
+  skip,
+  startWith,
   take,
   takeUntil,
   tap,
@@ -40,6 +43,7 @@ import Manifest, {
   IFetchedPeriod,
   Period,
 } from "../../manifest";
+import { fromEvent } from "../../utils/event_emitter";
 import SortedList from "../../utils/sorted_list";
 import WeakMapMemory from "../../utils/weak_map_memory";
 import ABRManager from "../abr";
@@ -110,6 +114,7 @@ export default function BufferOrchestrator(
   abrManager : ABRManager,
   sourceBuffersManager : SourceBuffersManager,
   segmentPipelinesManager : SegmentPipelinesManager<any>,
+  periodLoader : (period : Period) => Observable<unknown>,
   options: {
     wantedBufferAhead$ : Observable<number>;
     maxBufferAhead$ : Observable<number>;
@@ -193,31 +198,20 @@ export default function BufferOrchestrator(
    * manageConsecutivePeriodBuffers function, and restarting it when the clock
    * goes out of the bounds of these buffers.
    * @param {string} bufferType - e.g. "audio" or "video"
-   * @param {Period} basePeriod - Initial Period downloaded.
+   * @param {Period} basePeriod - Hint to the initial Period we should start
+   * with (Note: This is just an optimization, if it happens to be the wrong
+   * one, it will be automatically corrected).
    * @returns {Observable}
    */
   function manageEveryBuffers(
     bufferType : IBufferType,
     basePeriod : Period
   ) : Observable<IMultiplePeriodBuffersEvent> {
-    // Each Period currently considered, chronologically
-    const periodList = new SortedList<Period>((a, b) => a.start - b.start);
+    // Each PeriodBuffer currently active, in chronological order
+    const currentPeriodBuffers = new SortedList<Period>((a, b) => a.start - b.start);
 
-    /**
-     * Returns true if the given time is either:
-     *   - less than the start of the chronologically first Period
-     *   - more than the end of the chronologically last Period
-     * @param {number} time
-     * @returns {boolean}
-     */
-    function isOutOfPeriodList(time : number) : boolean {
-      const head = periodList.head();
-      const last = periodList.last();
-      if (head == null || last == null) { // if no period
-        return true;
-      }
-      return head.start > time || (last.end || Infinity) < time;
-    }
+    // Each Period currently downloading, in chronological order
+    const loadingPeriods = new SortedList<Period>((a, b) => a.start - b.start);
 
     // Destroy the current set of consecutive buffers.
     // Used when the clocks goes out of the bounds of those, e.g. when the user
@@ -241,12 +235,29 @@ export default function BufferOrchestrator(
       })
     );
 
+    const refreshPeriods$ = fromEvent(manifest, "manifestUpdate")
+      .pipe(skip(1), mergeMap(() => {
+        const periodsToRefresh : Array<Observable<IFetchedPeriod>> = [];
+        for (let i = 0; i < currentPeriodBuffers.length(); i++) {
+          const period = currentPeriodBuffers.get(i);
+          if (!period.isFetched() || !period.isUpToDate) {
+            const request =
+              loadPartialPeriod(manifest, period, periodLoader, period.start);
+            periodsToRefresh.push(request);
+          }
+        }
+        return observableMerge(periodsToRefresh).pipe(ignoreElements());
+      }));
+
     // Restart the current buffer when the wanted time is in another period
     // than the ones already considered
     const restartBuffers$ = clock$.pipe(
+
       filter(({ currentTime, wantedTimeOffset }) => {
-        return !!manifest.getPeriodForTime(wantedTimeOffset + currentTime) &&
-          isOutOfPeriodList(wantedTimeOffset + currentTime);
+        const realPosition = wantedTimeOffset + currentTime;
+        return !!manifest.getPeriodForTime(realPosition) &&
+          isOutOfPeriodList(currentPeriodBuffers, realPosition) &&
+          isOutOfPeriodList(loadingPeriods, realPosition);
       }),
 
       take(1),
@@ -254,6 +265,8 @@ export default function BufferOrchestrator(
       tap(({ currentTime, wantedTimeOffset }) => {
         log.info("Buffer: Current position out of the bounds of the active periods," +
           "re-creating buffers.", bufferType, currentTime + wantedTimeOffset);
+        currentPeriodBuffers.reset();
+        loadingPeriods.reset();
         destroyCurrentBuffers.next();
       }),
 
@@ -264,25 +277,52 @@ export default function BufferOrchestrator(
           throw new MediaError("MEDIA_TIME_NOT_FOUND", null, true);
         } else {
         // Note: For this to work, manageEveryBuffers should always emit the
-        // "periodBufferReady" event for the new InitialPeriod synchronously
+        // "loading-period" event for the new InitialPeriod synchronously
         return manageEveryBuffers(bufferType, newInitialPeriod);
         }
       })
     );
 
-    const currentBuffers$ = manageConsecutivePeriodBuffers(
-      bufferType, basePeriod, destroyCurrentBuffers).pipe(
-        tap((message) => {
-          if (message.type === "periodBufferReady") {
-            periodList.add(message.value.period);
-          } else if (message.type === "periodBufferCleared") {
-            periodList.removeElement(message.value.period);
-          }
-        }),
-        share() // as always, with side-effects
-      );
+    const currentBuffers$ = clock$.pipe(
+      take(1),
+      mergeMap(({ currentTime, wantedTimeOffset }) => {
+        const wantedPosition = currentTime + wantedTimeOffset;
+        return loadPartialPeriod(manifest, basePeriod, periodLoader, wantedPosition)
+          .pipe(
+            mergeMap(loadedPeriod => {
+              return createConsecutivePeriodBuffers(
+                bufferType, loadedPeriod, destroyCurrentBuffers
+              ).pipe(tap((message) => {
+                switch (message.type) {
+                  case "loading-period": // 1 - We download the Period
+                    loadingPeriods.add(message.value.period);
+                    return;
+                  case "periodBufferReady": // 2 - The PeriodBuffer is created
+                    const newPeriod = message.value.period;
+                    const loadingPeriod = loadingPeriods
+                      .findFirst((period) => period.groupId === newPeriod.groupId);
+                    if (loadingPeriod != null) {
+                      loadingPeriods.removeElement(loadingPeriod);
+                    }
+                    currentPeriodBuffers.add(newPeriod);
+                    return;
+                  case "periodBufferCleared": // 3 - The PeriodBuffer is removed
+                    currentPeriodBuffers.removeElement(message.value.period);
+                    return;
+                }
+              }));
+            }),
+            startWith(EVENTS.loadingPeriod(bufferType, basePeriod))
+          );
+      })
+    );
 
-    return observableMerge(currentBuffers$, restartBuffers$, outOfManifest$);
+    return observableMerge(
+      currentBuffers$,
+      restartBuffers$,
+      outOfManifest$,
+      refreshPeriods$
+    );
   }
 
   /**
@@ -303,7 +343,6 @@ export default function BufferOrchestrator(
    * A "periodBufferReady" event is sent each times a new PeriodBuffer is
    * created. The first one (for `basePeriod`) should be sent synchronously on
    * subscription.
-   *
    * A "periodBufferCleared" event is sent each times a PeriodBuffer is
    * destroyed.
    * @param {string} bufferType - e.g. "audio" or "video"
@@ -312,9 +351,9 @@ export default function BufferOrchestrator(
    * point should be destroyed.
    * @returns {Observable}
    */
-  function manageConsecutivePeriodBuffers(
+  function createConsecutivePeriodBuffers(
     bufferType : IBufferType,
-    basePeriod : Period,
+    basePeriod : IFetchedPeriod,
     destroy$ : Observable<void>
   ) : Observable<IMultiplePeriodBuffersEvent> {
     log.info("Buffer: Creating new Buffer for", bufferType, basePeriod);
@@ -339,9 +378,16 @@ export default function BufferOrchestrator(
 
     // Create Period Buffer for the next Period.
     const nextPeriodBuffer$ = createNextPeriodBuffer$
-      .pipe(exhaustMap((nextPeriod) =>
-        manageConsecutivePeriodBuffers(bufferType, nextPeriod, destroyNextBuffers$)
-      ));
+      .pipe(exhaustMap((nextPeriod) => {
+        const { start } = nextPeriod;
+        return loadPartialPeriod(manifest, nextPeriod, periodLoader, start).pipe(
+          takeUntil(destroyNextBuffers$),
+          mergeMap(loadedPeriod =>
+            createConsecutivePeriodBuffers(bufferType, loadedPeriod, destroyNextBuffers$)
+          ),
+          startWith(EVENTS.loadingPeriod(bufferType, nextPeriod))
+        );
+      }));
 
     // Allows to destroy each created Buffer, from the newest to the oldest,
     // once destroy$ emits.
@@ -411,4 +457,52 @@ export default function BufferOrchestrator(
       destroyAll$.pipe(ignoreElements())
     );
   }
+}
+
+/**
+ * @param {Object} manifest
+ * @param {Object} period
+ * @param {Function} periodLoader
+ * @param {number} wantedTime
+ * @returns {Observable}
+ */
+export function loadPartialPeriod(
+  manifest : Manifest,
+  period : Period,
+  periodLoader: (period : Period) => Observable<unknown>,
+  wantedTime : number
+) : Observable<IFetchedPeriod> {
+    return observableDefer(() => {
+      if (period.isFetched() && period.isUpToDate) {
+        return observableOf(period);
+      }
+
+      return periodLoader(period)
+        .pipe(mergeMap(() => {
+          const fetchedPeriod = manifest.getPeriodForTime(wantedTime);
+          if (fetchedPeriod == null || !fetchedPeriod.isFetched()) {
+            throw new MediaError("MEDIA_TIME_NOT_FOUND", null, true);
+          }
+          return observableOf(fetchedPeriod);
+        }));
+    });
+}
+
+/**
+ * Returns true if the given time is either:
+ *   - less than the start of the chronologically first Period
+ *   - more than the end of the chronologically last Period
+ * @param {number} time
+ * @returns {boolean}
+ */
+function isOutOfPeriodList(
+  periodList : SortedList<Period>,
+  time : number
+) : boolean {
+  const head = periodList.head();
+  const last = periodList.last();
+  if (head == null || last == null) { // if no period
+    return true;
+  }
+  return head.start > time || (last.end || Infinity) < time;
 }

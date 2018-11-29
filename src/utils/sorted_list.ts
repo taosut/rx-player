@@ -232,4 +232,11 @@ export default class SortedList<T> {
   // forceSort() {
   //   this._array.sort(this._sortingFn);
   // }
+
+  /**
+   * Remove all elements from this list.
+   */
+  reset() {
+    this._array = [];
+  }
 }
