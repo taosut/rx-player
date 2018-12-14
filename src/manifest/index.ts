@@ -450,7 +450,7 @@ export default class Manifest {
    */
   public getMaximumPosition() : number {
     if (!this.isLive) {
-      return this.getDuration();
+      return this.getDuration() + (this.minimumTime || 0);
     }
     const ast = this.availabilityStartTime || 0;
     const plg = this.presentationLiveGap || 0;
@@ -467,8 +467,9 @@ export default class Manifest {
     // TODO use RTT for the manifest request? (+ 3 or something)
     const BUFFER_DEPTH_SECURITY = 5;
 
+    const minimumTime = this.minimumTime || 0;
     if (!this.isLive) {
-      return [this.minimumTime || 0, this.getDuration()];
+      return [minimumTime, minimumTime + this.getDuration()];
     }
 
     const ast = this.availabilityStartTime || 0;
@@ -480,10 +481,7 @@ export default class Manifest {
     return [
       Math.min(
         max,
-        Math.max(
-          this.minimumTime != null ? this.minimumTime : 0,
-          max - tsbd + BUFFER_DEPTH_SECURITY
-        )
+        Math.max(minimumTime, max - tsbd + BUFFER_DEPTH_SECURITY)
       ),
       max,
     ];
