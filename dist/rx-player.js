@@ -213,11 +213,9 @@
         }), 
         /* unused harmony export itole2 */
         /* unused harmony export itole4 */
-        /* unused harmony export itole8 */
         /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "i", function() {
             return guidToUuid;
         });
-        /* unused harmony export toBase64URL */
         /* harmony import */ var _assert__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(13);
         /**
  * Copyright 2015 CANAL+ Group
@@ -235,8 +233,12 @@
  * limitations under the License.
  */
         /**
- * Returns Uint8Array from UTF16 string.
- * /!\ Take only the first byte from each UTF16 code.
+ * Convert a simple string to an Uint8Array containing the corresponding
+ * UTF-8 code units.
+ * /!\ its implementation favors simplicity and performance over accuracy.
+ * Each character having a code unit higher than 255 in UTF-16 will be
+ * truncated (real value % 256).
+ * Please take that into consideration when calling this function.
  * @param {string} str
  * @returns {Uint8Array}
  */        function strToBytes(str) {
@@ -244,18 +246,16 @@
             return arr;
         }
         /**
- * construct string from unicode values.
- * /!\ does not support non-UCS-2 values
- * @param {Uint8Array} bytes
+ * construct string from the code units given
+ * @param {Uint16Array|Uint8Array} bytes
  * @returns {string}
  */        function bytesToStr(bytes) {
             // NOTE: ugly I know, but TS is problematic here (you can try)
             return String.fromCharCode.apply(null, bytes);
         }
         /**
- * construct string from unicode values.
+ * construct string from the code units given.
  * Only use every other byte for each UTF-16 character.
- * /!\ does not support non-UCS-2 values
  * @param {Uint8Array} bytes
  * @returns {string}
  */        function bytesToUTF16Str(bytes) {
@@ -391,12 +391,7 @@
             ord[6] = p3B, ord[7] = p3A, // swap16 BE -> LE
             ord.set(p4, 8), ord.set(p5, 10), bytesToHex(ord);
         }
-        /**
- * Creates a base-64 encoded ASCII string from a string of binary data, with
- * possible trailing equal sign(s) stripped.
- * @param {string} str
- * @returns {string}
- */    }, 
+        /***/    }, 
     /* 2 */
     /***/ function(module, __webpack_exports__, __webpack_require__) {
         "use strict";
@@ -1615,7 +1610,7 @@ object-assign
             return arr.includes(searchElement, fromIndex);
             /* tslint:enable ban */            var len = arr.length >>> 0;
             if (0 === len) return !1;
-            for (var n = 0 | fromIndex, k = Math.max(0 <= n ? n : len - Math.abs(n), 0), areTheSame = function areTheSame(x, y) {
+            for (var n = 0 | fromIndex, k = 0 <= n ? Math.min(n, len - 1) : Math.max(len + n, 0), areTheSame = function areTheSame(x, y) {
                 return x === y || // Viva las JavaScriptas!
                 "number" == typeof x && "number" == typeof y && isNaN(x) && isNaN(y);
             }; k < len; ) {
@@ -1778,7 +1773,6 @@ object-assign
     /* 14 */
     /***/ function(module, __webpack_exports__, __webpack_require__) {
         "use strict";
-        /* unused harmony export createRange */
         /* harmony export (binding) */        __webpack_require__.d(__webpack_exports__, "a", function() {
             return convertToRanges;
         }), 
@@ -1845,19 +1839,13 @@ object-assign
         // Factor for rounding errors
         var EPSILON = 1 / 60;
         /**
- * @param {number} start
- * @param {number} end
- * @returns {Object}
- */        
-        /**
  * Check equality with a tolerance of EPSILON.
  * Used for various functions with this sort of tolerance regarding the
  * start/end of contiguous ranges.
  * @param {Number} a
  * @param {Number} b
  * @returns {Boolean}
- */
-        function nearlyEqual(a, b) {
+ */        function nearlyEqual(a, b) {
             return Math.abs(a - b) < EPSILON;
         }
         /**
@@ -6408,6 +6396,7 @@ object-assign
         }
         /**
  * Normalize language into an ISO639-3 format.
+ * Returns undefined if it failed to do so
  * @param {string} base
  * @returns {string}
  */        function normalizeBase(base) {
@@ -6420,7 +6409,7 @@ object-assign
               case 3:
                 result = ISO_639_2_to_ISO_639_3[base];
             }
-            return result || base;
+            return result;
         }
         /**
  * Normalize text track from a user given input into an object
@@ -7207,9 +7196,45 @@ object-assign
     /***/ function(module, __webpack_exports__, __webpack_require__) {
         "use strict";
         // EXTERNAL MODULE: ./src/log.ts + 1 modules
-                var log = __webpack_require__(0), array_find = __webpack_require__(11), event_emitter = __webpack_require__(31), id_generator = __webpack_require__(48), warn_once = __webpack_require__(36), object_assign = __webpack_require__(7), object_assign_default = /* */ __webpack_require__.n(object_assign), is_codec_supported = __webpack_require__(124), media_error = __webpack_require__(109), utils_languages = __webpack_require__(110), uniq = "function" == typeof window.Set ? function uniqFromSet(arr) {
+                var log = __webpack_require__(0), array_find = __webpack_require__(11), event_emitter = __webpack_require__(31), id_generator = __webpack_require__(48), warn_once = __webpack_require__(36), object_assign = __webpack_require__(7), object_assign_default = /* */ __webpack_require__.n(object_assign), is_codec_supported = __webpack_require__(124), media_error = __webpack_require__(109), utils_languages = __webpack_require__(110);
+        // EXTERNAL MODULE: ./src/utils/array_find.ts
+                /**
+ * Returns the input array without duplicates values.
+ * All values are unique.
+ * @param {Array.<*>} arr
+ * @returns {Array.<*>}
+ */
+        /* harmony default export */ var uniq = "function" == typeof window.Set ? 
+        /**
+ * Uniq implementation by using the Set browser API.
+ * @param {Array.<*>} arr
+ * @returns {Array.<*>}
+ */
+        function uniqFromSet(arr) {
             return Array.from(new Set(arr));
-        } : function uniqFromFilter(arr) {
+        } : 
+        // CONCATENATED MODULE: ./src/utils/uniq.ts
+        /**
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+        /**
+ * Uniq implementation by combining a filter and an indexOf.
+ * @param {Array.<*>} arr
+ * @returns {Array.<*>}
+ */
+        function uniqFromFilter(arr) {
             return arr.filter(function(val, i, self) {
                 return self.indexOf(val) === i;
             });
@@ -7299,8 +7324,27 @@ object-assign
                 }) || null;
             }, Adaptation;
         }();
-        // EXTERNAL MODULE: ./src/utils/array_find.ts
-                /**
+        // CONCATENATED MODULE: ./src/manifest/representation.ts
+        /**
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+        /**
+ * Normalized Representation structure.
+ * @class Representation
+ */        
+        /**
  * Only keep Representations for which the codec is currently supported.
  * @param {string} adaptationType
  * @param {Array.<Object>} representations
@@ -10791,9 +10835,29 @@ object-assign
             };
         }
         // EXTERNAL MODULE: ./src/utils/array_find.ts
-                var array_find = __webpack_require__(11), object_values = "function" == typeof Object.values ? Object.values : 
-        /* tslint:enable no-unbound-method */
-        function objectValues(o) {
+                var array_find = __webpack_require__(11);
+        // CONCATENATED MODULE: ./src/utils/object_values.ts
+        /**
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+        /**
+ * @param {Object|Array} o
+ * @returns {Array.<*>}
+ */        
+        /* tslint:disable no-unbound-method */
+        /* harmony default export */ var object_values = "function" == typeof Object.values ? Object.values : function objectValues(o) {
             return Object.keys(o).map(function(k) {
                 return o[k];
             });
@@ -10870,7 +10934,8 @@ object-assign
                 this._bytesSampled = 0;
             }, BandwidthEstimator;
         }();
-        // CONCATENATED MODULE: ./src/utils/object_values.ts
+        /* tslint:enable no-unbound-method */
+        // CONCATENATED MODULE: ./src/core/abr/ewma.ts
         /**
  * Copyright 2015 CANAL+ Group
  *
@@ -10886,8 +10951,11 @@ object-assign
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-        /* tslint:disable no-unbound-method */
-        /* harmony default export */        
+        /**
+ * Tweaked implementation of an exponential weighted Moving Average.
+ * Heavily "inspired" from the shaka-player one (Ewma).
+ * @class EWMA
+ */        
         // CONCATENATED MODULE: ./src/utils/array_find_index.ts
         /**
  * Copyright 2015 CANAL+ Group
@@ -16529,9 +16597,12 @@ object-assign
                 var _this;
                 void 0 === options && (options = {}), _this = _EventEmitter.call(this) || this;
                 var _parseConstructorOpti = parseConstructorOptions(options), initialAudioBitrate = _parseConstructorOpti.initialAudioBitrate, initialVideoBitrate = _parseConstructorOpti.initialVideoBitrate, limitVideoWidth = _parseConstructorOpti.limitVideoWidth, maxAudioBitrate = _parseConstructorOpti.maxAudioBitrate, maxBufferAhead = _parseConstructorOpti.maxBufferAhead, maxBufferBehind = _parseConstructorOpti.maxBufferBehind, maxVideoBitrate = _parseConstructorOpti.maxVideoBitrate, throttleWhenHidden = _parseConstructorOpti.throttleWhenHidden, videoElement = _parseConstructorOpti.videoElement, wantedBufferAhead = _parseConstructorOpti.wantedBufferAhead, stopAtEnd = _parseConstructorOpti.stopAtEnd;
- // Workaround to support Firefox autoplay on FF 42.
+                return _this.last20PushedSegments = {
+                    audio: [],
+                    video: []
+                }, // Workaround to support Firefox autoplay on FF 42.
                 // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1194624
-                                return videoElement.preload = "auto", _this.version = 
+                videoElement.preload = "auto", _this.version = 
                 /*PLAYER_VERSION*/
                 "3.10.1", _this.log = log.a, _this.state = "STOPPED", _this.videoElement = videoElement, 
                 _this._priv_destroy$ = new Subject.a(), 
@@ -17272,6 +17343,8 @@ object-assign
                     return this.videoElement.duration;
                 }
                 return null != manifest ? manifest.getMaximumPosition() : null;
+            }, _proto.getLastPushedSegments = function getLastPushedSegments() {
+                return this.last20PushedSegments;
             }
             /**
    * Reset all state properties relative to a playing content.
@@ -17349,12 +17422,16 @@ object-assign
                     break;
 
                   case "added-segment":
+                    var _event$value = event.value, bufferType = _event$value.bufferType, segmentData = _event$value.segmentData;
+                    if ("audio" === bufferType || "video" === bufferType) {
+                        for (;20 <= this.last20PushedSegments[bufferType].length; ) this.last20PushedSegments[bufferType].shift();
+                        this.last20PushedSegments[bufferType].push(segmentData);
+                    }
                     if (!this._priv_contentInfos) return void log.a.error("API: Added segment while no content is loaded");
  // Manage image tracks
                     // TODO Better way? Perhaps linked to an ImageSourceBuffer
                     // implementation
-                                        var _event$value = event.value, bufferType = _event$value.bufferType, segmentData = _event$value.segmentData;
-                    if ("image" === bufferType && null != segmentData && "bif" === segmentData.type) {
+                                        if ("image" === bufferType && null != segmentData && "bif" === segmentData.type) {
                         var imageData = segmentData.data;
  // TODO merge multiple data from the same track together
                                                 this._priv_contentInfos.thumbnails = imageData, this.trigger("imageTrackUpdate", {
