@@ -620,16 +620,12 @@ export default function loadBXF({
       finalOverlays.sort((A, B) => A.start - B.start);
 
       const metaplaylist = {
-        metadata: {
-          name: "",
-          mplVersion: "1.0",
-          generatedAt: "",
+        attributes: {
+          version: "0.1",
+          dynamic: true,
+          overlays: finalOverlays,
         },
         contents: finalContent,
-        attributes: {
-          timeShiftBufferDepth,
-        },
-        overlays: finalOverlays,
       };
 
       if (contents.length >= 1) {
