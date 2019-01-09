@@ -25,6 +25,7 @@
 
 import nextTick from "next-tick";
 import {
+  BehaviorSubject,
   combineLatest as observableCombineLatest,
   concat as observableConcat,
   defer as observableDefer,
@@ -78,6 +79,18 @@ import getSegmentsNeeded from "./get_segments_needed";
 import getWantedRange from "./get_wanted_range";
 import segmentFilter from "./segment_filter";
 
+import { getLeftSizeOfRange } from "../../../utils/ranges";
+
+export interface ILoadSegmentEvent {
+  type: "loaded"|"appended";
+  value: {
+    representation: Representation;
+    segment: ISegment;
+    requestTime? : number;
+    bufferGap? : number;
+  };
+}
+
 // Item emitted by the Buffer's clock$
 export interface IRepresentationBufferClockTick {
   buffered : TimeRanges; // buffered ranged of the SourceBuffer
@@ -104,6 +117,8 @@ export interface IRepresentationBufferArguments<T> {
   segmentFetcher : IPrioritizedSegmentFetcher<T>;
   terminate$ : Observable<void>;
   wantedBufferAhead$ : Observable<number>;
+  loadSegmentEvents$: Subject<ILoadSegmentEvent>;
+  lastStableBitrate$: BehaviorSubject<undefined|number>;
 }
 
 // Informations about a Segment waiting for download
@@ -125,6 +140,7 @@ interface ISegmentObject<T> {
   segmentInfos : ISegmentInfos|null; // informations about the segment's start
                                      // and duration
   segmentOffset : number; // Offset to add to the segment at decode time
+  requestTime? : number;
 }
 
 // Informations about a loaded and parsed Segment
@@ -159,7 +175,9 @@ export default function RepresentationBuffer<T>({
   segmentBookkeeper, // keep track of what segments already are in the SourceBuffer
   segmentFetcher, // allows to download new segments
   terminate$, // signal the RepresentationBuffer that it should terminate
-  wantedBufferAhead$, // emit the buffer goal
+  wantedBufferAhead$, // emit the buffer goal,
+  loadSegmentEvents$,
+  lastStableBitrate$,
 } : IRepresentationBufferArguments<T>) : Observable<IRepresentationBufferEvent<T>> {
   const { manifest, period, adaptation, representation } = content;
   const codec = representation.getMimeTypeString();
@@ -197,7 +215,7 @@ export default function RepresentationBuffer<T>({
     terminate$.pipe(take(1), mapTo(true), startWith(false)),
     finishedDownloadQueue$.pipe(startWith(undefined))
   ).pipe(
-    map(function getCurrentStatus([timing, bufferGoal, terminate]) : {
+    map(function getCurrentStatus([ timing, bufferGoal, terminate ]) : {
       discontinuity : number;
       isFull : boolean;
       terminate : boolean;
@@ -215,7 +233,8 @@ export default function RepresentationBuffer<T>({
         .shouldRefresh(neededRange.start, neededRange.end);
 
       let neededSegments = getSegmentsNeeded(representation, neededRange)
-        .filter((segment) => shouldDownloadSegment(segment, neededRange))
+        .filter((segment) =>
+          shouldDownloadSegment(segment, neededRange, lastStableBitrate$.getValue()))
         .map((segment) => ({
           priority: getSegmentPriority(segment, timing),
           segment,
@@ -359,13 +378,24 @@ export default function RepresentationBuffer<T>({
 
         currentSegmentRequest = { segment, priority, request$ };
         const response$ = request$.pipe(
-          mergeMap((fetchedSegment) => {
-            currentSegmentRequest = null;
-            const initInfos = initSegmentObject &&
-              initSegmentObject.segmentInfos || undefined;
-            return fetchedSegment.parse(initInfos);
-          }),
-          map((args) => ({ segment, value: args }))
+              mergeMap((fetchedSegment) => {
+                const { requestInfos: { receivedTime, sendingTime } } = fetchedSegment;
+                const requestTime = receivedTime != null && sendingTime != null ?
+                  receivedTime - sendingTime : undefined;
+                loadSegmentEvents$.next({
+                  type: "loaded",
+                  value: {
+                    segment,
+                    representation,
+                    requestTime,
+                  },
+                });
+                currentSegmentRequest = null;
+                const initInfos = initSegmentObject &&
+                  initSegmentObject.segmentInfos || undefined;
+                return fetchedSegment.parse(initInfos);
+              }),
+              map((args) => ({ segment, value: args }))
         );
 
         return observableConcat(response$, requestNextSegment$);
@@ -407,18 +437,30 @@ export default function RepresentationBuffer<T>({
       sourceBufferWaitingQueue.add(segment.id);
 
       return append$.pipe(
-        mapTo(EVENTS.addedSegment(bufferType, segment, segmentData)),
         tap(() => { // add to SegmentBookkeeper
           if (segment.isInit) {
             return;
           }
           const { time, duration, timescale } = segmentInfos != null ?
-            segmentInfos : segment;
+          segmentInfos : segment;
           const start = time / timescale;
           const end = duration && (time + duration) / timescale;
           segmentBookkeeper
             .insert(period, adaptation, representation, segment, start, end);
+          const videoElement = document.getElementsByTagName("video")[0];
+          const timeRanges = queuedSourceBuffer.getBuffered();
+          const currentTime = videoElement.currentTime;
+          const bufferGap = getLeftSizeOfRange(timeRanges, currentTime);
+          loadSegmentEvents$.next({
+            type: "appended",
+            value: {
+              representation,
+              segment,
+              bufferGap,
+            },
+          });
         }),
+        mapTo(EVENTS.addedSegment(bufferType, segment, segmentData)),
         finalize(() => { // remove from queue
           sourceBufferWaitingQueue.remove(segment.id);
         }));
@@ -433,9 +475,16 @@ export default function RepresentationBuffer<T>({
    */
   function shouldDownloadSegment(
     segment : ISegment,
-    neededRange : { start: number; end: number }
+    neededRange : { start: number; end: number },
+    lastStableBitrate? : number
   ) : boolean {
     return segmentFilter(
-      segment, content, segmentBookkeeper, neededRange, sourceBufferWaitingQueue);
+      segment,
+      content,
+      segmentBookkeeper,
+      neededRange,
+      sourceBufferWaitingQueue,
+      lastStableBitrate
+    );
   }
 }

@@ -15,12 +15,14 @@
  */
 
 import RepresentationBuffer, {
+  ILoadSegmentEvent,
   IRepresentationBufferArguments,
   IRepresentationBufferClockTick,
 } from "./representation_buffer";
 
 export default RepresentationBuffer;
 export {
+  ILoadSegmentEvent,
   IRepresentationBufferArguments,
   IRepresentationBufferClockTick,
 };

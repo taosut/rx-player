@@ -26,6 +26,7 @@
 
 import objectAssign from "object-assign";
 import {
+  BehaviorSubject,
   concat as observableConcat,
   defer as observableDefer,
   merge as observableMerge,
@@ -57,6 +58,7 @@ import { IPrioritizedSegmentFetcher } from "../../pipelines";
 import { QueuedSourceBuffer } from "../../source_buffers";
 import EVENTS from "../events_generators";
 import RepresentationBuffer, {
+  ILoadSegmentEvent,
   IRepresentationBufferClockTick,
 } from "../representation";
 import SegmentBookkeeper from "../segment_bookkeeper";
@@ -107,7 +109,8 @@ export default function AdaptationBuffer<T>(
   wantedBufferAhead$ : Observable<number>,
   content : {
     manifest : Manifest;
-    period : Period; adaptation : Adaptation;
+    period : Period;
+    adaptation : Adaptation;
   },
   abrManager : ABRManager,
   options : { manualBitrateSwitchingMode : "seamless"|"direct" }
@@ -125,8 +128,20 @@ export default function AdaptationBuffer<T>(
     return objectAssign({ downloadBitrate }, tick);
   }));
 
+  const loadSegmentEvents$ = new Subject<ILoadSegmentEvent>();
+  const lastStableBitrate$ = new BehaviorSubject<undefined|number>(undefined);
+
   const abr$ : Observable<IABREstimation> =
-    abrManager.get$(adaptation.type, abrClock$, adaptation.representations).pipe(
+    abrManager.get$(
+      adaptation.type,
+      abrClock$,
+      adaptation.representations,
+      loadSegmentEvents$
+    ).pipe(
+      tap(({ lastStableBitrate }) => {
+        lastStableBitrate$.next(lastStableBitrate);
+      }),
+      distinctUntilChanged((a, b) => a.representation.id === b.representation.id),
       // equivalent to a sane shareReplay:
       // https://github.com/ReactiveX/rxjs/issues/3336
       // XXX TODO Replace it when that issue is resolved
@@ -208,6 +223,8 @@ export default function AdaptationBuffer<T>(
         segmentFetcher,
         terminate$: terminateCurrentBuffer$,
         wantedBufferAhead$,
+        loadSegmentEvents$,
+        lastStableBitrate$,
       });
     });
   }

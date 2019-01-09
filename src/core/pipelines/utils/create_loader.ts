@@ -77,6 +77,7 @@ export interface IPipelineLoaderResponse<T> {
     responseData : T;
     url? : string;
     sendingTime? : number;
+    receivedTime? : number;
   };
 }
 
