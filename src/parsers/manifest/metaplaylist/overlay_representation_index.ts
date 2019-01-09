@@ -77,7 +77,7 @@ export default class OverlayRepresentationIndex implements IRepresentationIndex 
           Math.min(overlayData.end, this._periodEnd) - time;
         return {
           isInit: false,
-          id: "ov_" + JSON.stringify(overlayData), // XXX TODO Too ugly
+          id: "ov_" + time + duration,
           time,
           duration,
           timescale: overlayData.timescale,
