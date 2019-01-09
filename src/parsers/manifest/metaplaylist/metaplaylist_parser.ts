@@ -267,13 +267,17 @@ function createManifest(
   if (overlays != null && overlays.length > 0) {
     for (let i = 0; i < periods.length; i++) {
       const period = periods[i];
+      const periodEnd =
+        period.end != null ? period.end :
+        period.duration != null ? period.start + period.duration :
+        undefined;
       period.adaptations.overlay = [{
         id: formatId(period.id) + "_" + "ada_ov",
         type: "overlay",
         representations: [{
           id: formatId(period.id) + "_" + "rep_ov",
           bitrate: 0,
-          index: new OverlayRepresentationIndex(overlays, period.start, period.end),
+          index: new OverlayRepresentationIndex(overlays, period.start, periodEnd),
         }],
       }];
     }
