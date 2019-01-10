@@ -141,15 +141,22 @@ function getFilteredRepresentations(
   return _representations;
 }
 
+interface IRepresentationScore {
+  representation : Representation;
+  estimator : EWMA;
+}
+
 /**
- * Choose the right representation thanks to choosers:
- * - The throughput chooser measures the current user's bandwidth.
- * - The buffer based chooser applies BOLA rule to pick a representation.
+ * Choose the right Representation thanks to "choosers":
  *
- * The representation are filtered according to the chosen manual bitrate, the max
- * bitrate authorized and the size of the video element. Those parameters can be set
- * through different subjects and methods.
- * The subjects (undocumented here are):
+ * - The throughput chooser choose the Representation relatively to the current
+ *   user's bandwidth.
+ *
+ * - The buffer-based chooser choose the Representation relatively to the
+ *   current size of the buffer.
+ *
+ * To have more control over which Representation should be choosen, you can
+ * also use the following exposed subjects:
  *
  *   - manualBitrate$ {Subject}: Set the bitrate manually, if no representation
  *     is found with the given bitrate. An immediately inferior one will be
@@ -173,10 +180,12 @@ export default class RepresentationChooser {
   private readonly _throttle$ : Observable<number>|undefined;
   private readonly _throughputChooser : ThroughputChooser;
 
-  private _scoreData$ : BehaviorSubject<undefined|{
-    representation: Representation;
-    EWMA: EWMA;
-  }>;
+  /**
+   * Score estimator for the current Representation.
+   * null when no representation has been chosen yet.
+   * @type {BehaviorSubject}
+   */
+  private _representationScore$ : BehaviorSubject<IRepresentationScore|null>;
 
   /**
    * @param {Object} options
@@ -185,20 +194,13 @@ export default class RepresentationChooser {
     this._throughputChooser = new ThroughputChooser(options.initialBitrate || 0);
 
     this._dispose$ = new Subject();
-    this._scoreData$ = new BehaviorSubject<undefined|{
-      representation: Representation;
-      EWMA: EWMA;
-    }>(undefined);
+    this._representationScore$ = new BehaviorSubject<IRepresentationScore|null>(null);
 
     this.manualBitrate$ = new BehaviorSubject(
-      options.manualBitrate != null ?
-      options.manualBitrate : -1
-    );
+      options.manualBitrate != null ? options.manualBitrate : -1);
 
     this.maxAutoBitrate$ = new BehaviorSubject(
-      options.maxAutoBitrate != null ?
-      options.maxAutoBitrate : Infinity
-    );
+      options.maxAutoBitrate != null ? options.maxAutoBitrate : Infinity);
 
     this._limitWidth$ = options.limitWidth$;
     this._throttle$ = options.throttle$;
@@ -207,7 +209,7 @@ export default class RepresentationChooser {
   public get$(
     clock$: Observable<IRepresentationChooserClockTick>,
     representations : Representation[],
-    appendSegment$ : Subject<IAppendedSegment>
+    appendSegment$ : Observable<IAppendedSegment>
   ): Observable<IABREstimation> {
     if (!representations.length) {
       throw new Error("ABRManager: no representation choice given");
@@ -227,14 +229,12 @@ export default class RepresentationChooser {
 
     if (this._limitWidth$) {
       _deviceEventsArray.push(
-        this._limitWidth$
-          .pipe(map(width => ({ width })))
+        this._limitWidth$.pipe(map(width => ({ width })))
       );
     }
     if (this._throttle$) {
       _deviceEventsArray.push(
-        this._throttle$
-          .pipe(map(bitrate => ({ bitrate })))
+        this._throttle$.pipe(map(bitrate => ({ bitrate })))
       );
     }
 
@@ -249,42 +249,38 @@ export default class RepresentationChooser {
       if (manualBitrate >= 0) {
         // -- MANUAL mode --
         return observableOf({
-          bitrate: undefined, // Bitrate estimation is deactivated here
           representation: fromBitrateCeil(representations, manualBitrate) ||
             representations[0],
+
+          bitrate: undefined, // Bitrate estimation is deactivated here
+          lastStableBitrate: undefined,
           manual: true,
           urgent: true, // a manual bitrate switch should happen immediately
-          lastStableBitrate: Infinity,
         });
       }
 
       // -- AUTO mode --
       let lastEstimatedBitrate: number|undefined;
-      let lastEstimationMode: "bandwidth"|"BOLA"|undefined = "bandwidth";
+      let lastEstimationMode: "bandwidth"|"buffer" = "bandwidth";
+      const scoreProcessor$ = this._representationScore$
+        .pipe(filter((p): p is IRepresentationScore => !!p));
       const bufferBasedEstimation$ =
-        BufferBasedChooser(
-          appendSegment$,
-          this._scoreData$.pipe(filter((e): e is {
-            representation: Representation;
-            EWMA: EWMA;
-          } => !!e)),
-          representations
-        );
+        BufferBasedChooser(appendSegment$, scoreProcessor$, representations);
 
       return observableCombineLatest(
         clock$,
         maxAutoBitrate$,
         deviceEvents$,
         bufferBasedEstimation$.pipe(startWith(undefined)),
-        this._scoreData$.pipe(startWith(undefined))
+        this._representationScore$.pipe(startWith(null))
       ).pipe(
         map(([
           clock,
           maxAutoBitrate,
           deviceEvents,
           chosenRepFromBufferBasedABR,
-          scoreData,
-        ]): IABREstimation|undefined => {
+          scoreProcessor,
+        ]): IABREstimation => {
           const _representations =
             getFilteredRepresentations(representations, deviceEvents);
 
@@ -303,11 +299,11 @@ export default class RepresentationChooser {
                 clock.bufferGap < Infinity &&
                 clock.bufferGap > 10
               ) {
-                return "BOLA";
+                return "buffer";
               }
             } else {
               if (
-                lastEstimationMode === "BOLA" && clock.bufferGap < 5 &&
+                lastEstimationMode === "buffer" && clock.bufferGap < 5 &&
                 (
                   !chosenRepFromBufferBasedABR ||
                   chosenRepFromBufferBasedABR.bitrate > chosenRepFromBandwidth.bitrate
@@ -321,12 +317,12 @@ export default class RepresentationChooser {
 
           console.log("!!! MODE", lastEstimationMode);
 
-          const lastStableBitrate = scoreData ?
-            scoreData.EWMA.getEstimate() > 1 ?
-              scoreData.representation.bitrate : undefined :
+          const lastStableBitrate = scoreProcessor ?
+            scoreProcessor.estimator.getEstimate() > 1 ?
+              scoreProcessor.representation.bitrate : undefined :
             undefined;
 
-          if (lastEstimationMode === "BOLA" && chosenRepFromBufferBasedABR != null) {
+          if (lastEstimationMode === "buffer") {
             return {
               bitrate: bandwidthEstimate,
               representation: chosenRepFromBufferBasedABR,
@@ -335,18 +331,16 @@ export default class RepresentationChooser {
               manual: false,
               lastStableBitrate,
             };
-          } else if (lastEstimationMode === "bandwidth") {
-            return {
-              bitrate: bandwidthEstimate,
-              representation: chosenRepFromBandwidth,
-              urgent: this._throughputChooser.isUrgent(
-                chosenRepFromBandwidth.bitrate, clock),
-              manual: false,
-              lastStableBitrate,
-            };
           }
+          return {
+            bitrate: bandwidthEstimate,
+            representation: chosenRepFromBandwidth,
+            urgent: this._throughputChooser.isUrgent(
+              chosenRepFromBandwidth.bitrate, clock),
+            manual: false,
+            lastStableBitrate,
+          };
         }),
-        filter((e): e is IABREstimation => !!e),
         distinctUntilChanged((a, b) => {
           return a.representation.id === b.representation.id &&
             b.lastStableBitrate === a.lastStableBitrate;
@@ -357,40 +351,41 @@ export default class RepresentationChooser {
   }
 
   /**
-   * Add a bandwidth estimate by giving:
+   * Add bandwidth and "maintainability score" estimate by giving:
    *   - the duration of the request, in s
    *   - the size of the request in bytes
+   *   - the content downloaded
    * @param {number} duration
    * @param {number} size
+   * @param {Object} content
    */
-  public addEstimate(duration : number, size : number, content: {
-      segment: ISegment; representation: Representation;
-    }) : void {
+  public addEstimate(
+    duration : number,
+    size : number,
+    content: { segment: ISegment; representation: Representation }
+  ) : void {
+    this._throughputChooser.addEstimate(duration, size); // calculate bandwidth
+
+    // calculate "maintainability score"
     const { segment, representation } = content;
-    if (segment.duration != null) {
-      const quality =
-        (segment.duration / segment.timescale) / (duration / 1000);
-      const scoreData = this._scoreData$.getValue();
-      if (
-        !scoreData ||
-        representation.id !== scoreData.representation.id
-      ) {
-        const newEWMA = new EWMA(5);
-        newEWMA.addSample(1, quality);
-        this._scoreData$.next({
-          representation,
-          EWMA: newEWMA,
-        });
-      } else {
-        const { EWMA: newEWMA } = scoreData;
-        newEWMA.addSample(1, quality);
-        this._scoreData$.next({
-          representation: scoreData.representation,
-          EWMA: newEWMA,
-        });
-      }
+    if (segment.duration == null) {
+      return;
     }
-    this._throughputChooser.addEstimate(duration, size);
+    const requestDuration = duration / 1000;
+    const segmentDuration = segment.duration / segment.timescale;
+    const ratio = segmentDuration / requestDuration;
+
+    const scoreProcessor = this._representationScore$.getValue();
+    if (
+      scoreProcessor != null &&
+      representation.id === scoreProcessor.representation.id
+    ) {
+      scoreProcessor.estimator.addSample(requestDuration, ratio);
+      return;
+    }
+    const newEWMA = new EWMA(5);
+    newEWMA.addSample(requestDuration, ratio);
+    this._representationScore$.next({ representation, estimator: newEWMA });
   }
 
   /**

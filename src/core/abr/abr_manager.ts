@@ -29,9 +29,7 @@ import {
   Representation,
 } from "../../manifest";
 import { IBufferType } from "../source_buffers";
-import {
-  IAppendedSegment
-} from "./buffer_based_chooser";
+import { IAppendedSegment } from "./buffer_based_chooser";
 import RepresentationChooser, {
   IABREstimation,
   IRepresentationChooserClockTick,
@@ -241,7 +239,7 @@ export default class ABRManager {
     type : IBufferType,
     clock$ : Observable<IABRClockTick>,
     representations : Representation[] = [],
-    appendSegment$ : Subject<IAppendedSegment>
+    appendSegment$ : Observable<IAppendedSegment>
   ) : Observable<IABREstimation> {
     return this._lazilyCreateChooser(type)
       .get$(clock$, representations, appendSegment$);

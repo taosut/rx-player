@@ -32,106 +32,41 @@ import arrayFindIndex from "../../utils/array_find_index";
 import EWMA from "./ewma";
 
 export interface IAppendedSegment {
-  representation: Representation;
-  segment: ISegment;
+  representation : Representation;
+  segment : ISegment;
   bufferGap? : number;
 }
 
-interface IEstimate {
-  representation: Representation;
-  EWMA: EWMA;
+interface IRepresentationScore {
+  representation : Representation;
+  estimator : EWMA;
 }
 
 /**
- * Uses BOLA rule to choose the representation that should keep the buffer stable.
+ * Choose a Representation based on the currently available buffer.
  *
- * This chooser is a hybrid solution that also relies on representations
- * "maintainability". Each time a chunk is downloaded, from the ratio between
- * the chunk duration and chunk's request time, we can assume that the representation
- * is "maintanable" or not. If so, we may switch to a better quality, or conversely to
- * a worse quality.
+ * This algorithm is based on the deviation of the BOLA algorithm.
+ * It is a hybrid solution that also relies on representations
+ * "maintainability".
+ * Each time a chunk is downloaded, from the ratio between the chunk duration
+ * and chunk's request time, we can assume that the representation is
+ * "maintanable" or not.
+ * If so, we may switch to a better quality, or conversely to a worse quality.
  *
- * The switch decision is taken thanks to BOLA Rule. From bufferGap and quality levels,
- * buffer steps are computed to know when we should switch quality.
+ * @param {Observable} appendedSegment
+ * @param {Observable} scoreProcessor$
+ * @param {Array.<Object>} representations
+ * @returns {Observable}
  */
 export default function BufferBasedChooser(
   appendedSegment$: Observable<IAppendedSegment>,
-  scoreData$: Observable<IEstimate>,
+  scoreProcessor$: Observable<IRepresentationScore>,
   representations: Representation[]
 ): Observable<Representation> {
-  /**
-   * Get minimum buffer we should keep ahead to pick this representation index.
-   * @param {number} index
-   * @returns {number}
-   */
-  function minBufferLevelForRepresentation(index: number): number {
-    const qBitrate = bitrates[index];
-    const qUtility = utilities[index];
-    let min = 0;
-    for (let i = index - 1; i >= 0; --i) {
-        if (utilities[i] < utilities[index]) {
-            const iBitrate = bitrates[i];
-            const iUtility = utilities[i];
-            const level = Vp *
-              (gp + (qBitrate * iUtility - iBitrate * qUtility) /
-                (qBitrate - iBitrate));
-            min = Math.max(min, level);
-        }
-    }
-    return min;
-  }
-
-  /**
-   * From the buffer gap, choose a representation.
-   * @param {number} bufferGap
-   * @returns {undefined|Object}
-   */
-  function getEstimate(
-    bufferGap: number,
-    scoreData: IEstimate,
-    lastChosenRepresentation?: Representation
-  ): Representation {
-      const currentScore = scoreData.EWMA.getEstimate();
-      const index = arrayFindIndex(representations, (r) => {
-        return r.id === (scoreData as IEstimate).representation.id;
-      });
-      if (lastChosenRepresentation) {
-          if (
-            lastChosenRepresentation.bitrate !== scoreData.representation.bitrate ||
-            currentScore > 1
-          ) {
-            const minBufferLevel = minBufferLevelForRepresentation(index + 1);
-            if (bufferGap > minBufferLevel) {
-              const upperRep = arrayFind(representations, (r) => {
-                return r.bitrate > lastChosenRepresentation.bitrate;
-              });
-              const newRepresentation = upperRep || scoreData.representation;
-              return newRepresentation;
-            }
-          } else if (
-            lastChosenRepresentation.bitrate !== scoreData.representation.bitrate ||
-            currentScore < 1.15
-          ) {
-            const minBufferLevel = minBufferLevelForRepresentation(index);
-            if (bufferGap < minBufferLevel * 0.8) {
-              const downerRepIndex = arrayFindIndex(representations, (r, i) => {
-                const lastRep = representations[i - 1];
-                return lastRep &&
-                  lastRep.bitrate < lastChosenRepresentation.bitrate &&
-                  r.id === lastChosenRepresentation.id;
-              }) - 1;
-              const newRepresentation = representations[downerRepIndex] ||
-                scoreData.representation;
-              return newRepresentation;
-            }
-        }
-      }
-      return lastChosenRepresentation || scoreData.representation;
-  }
 
   const bitrates = representations.map((r) => r.bitrate);
-  const logs =
-    representations.map((r) => Math.log(r.bitrate / representations[0].bitrate));
+  const logs = representations
+    .map((r) => Math.log(r.bitrate / representations[0].bitrate));
   const utilities = logs.map(log => log - logs[0] + 1); // normalize
   let currentRepresentation: undefined|Representation;
 
@@ -141,16 +76,85 @@ export default function BufferBasedChooser(
     ((representations.length * 2) + 10);
   const Vp = 1 / gp;
 
+  /**
+   * Get minimum buffer we should keep ahead to pick this Representation.
+   * @param {number} index
+   * @returns {number}
+   */
+  function minBufferLevelForRepresentation(index: number): number {
+    const qBitrate = bitrates[index];
+    const qUtility = utilities[index];
+    let min = 0;
+    for (let i = index - 1; i >= 0; --i) {
+      if (utilities[i] < utilities[index]) {
+        const iBitrate = bitrates[i];
+        const iUtility = utilities[i];
+        const level = Vp *
+          (gp + (qBitrate * iUtility - iBitrate * qUtility) /
+            (qBitrate - iBitrate));
+        min = Math.max(min, level);
+      }
+    }
+    return min;
+  }
+
+  /**
+   * From the buffer gap, choose a representation.
+   * @param {number} bufferGap
+   * @param {Object} scoreData
+   * @param {Object|undefined} lastChoosenRepresentation
+   * @returns {Object}
+   */
+  function getEstimate(
+    lastChosenRepresentation : Representation,
+    bufferGap : number,
+    scoreData : { representation : Representation; score : number }
+  ) : Representation {
+    const index = arrayFindIndex(representations, (r) => {
+      return r.id === scoreData.representation.id;
+    });
+    if (
+      lastChosenRepresentation.bitrate !== scoreData.representation.bitrate ||
+      scoreData.score > 1
+    ) {
+      const minBufferLevel = minBufferLevelForRepresentation(index + 1);
+      if (bufferGap > minBufferLevel) {
+        const upperRep = arrayFind(representations, (r) => {
+          return r.bitrate > lastChosenRepresentation.bitrate;
+        });
+        return upperRep || scoreData.representation;
+      }
+    } else if (
+      lastChosenRepresentation.bitrate !== scoreData.representation.bitrate ||
+      scoreData.score < 1.15
+    ) {
+      const minBufferLevel = minBufferLevelForRepresentation(index);
+      if (bufferGap < minBufferLevel * 0.8) {
+        const downerRepIndex = arrayFindIndex(representations, (r, i) => {
+          const lastRep = representations[i - 1];
+          return lastRep &&
+            lastRep.bitrate < lastChosenRepresentation.bitrate &&
+            r.id === lastChosenRepresentation.id;
+        }) - 1;
+        return representations[downerRepIndex] ||
+          scoreData.representation;
+      }
+    }
+    return lastChosenRepresentation;
+  }
+
   return appendedSegment$.pipe(
-    withLatestFrom(scoreData$),
-    map(([{ bufferGap }, scoreData]) => {
+    withLatestFrom(scoreProcessor$),
+    map(([{ bufferGap }, scoreProcessor]) => {
       if (bufferGap) {
-        const representation = getEstimate(
-          bufferGap,
-          scoreData,
-          currentRepresentation
-        );
-        return representation;
+        if (currentRepresentation == null) {
+          return scoreProcessor.representation;
+        }
+        const scoreData = {
+          representation: scoreProcessor.representation,
+          score: scoreProcessor.estimator.getEstimate(),
+        };
+        return getEstimate(currentRepresentation, bufferGap, scoreData);
       }
     }),
     tap((representation) => currentRepresentation = representation),
