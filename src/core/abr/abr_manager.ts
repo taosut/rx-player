@@ -23,10 +23,14 @@ import {
   takeUntil,
 } from "rxjs/operators";
 import log from "../../log";
-import { Representation } from "../../manifest";
+import {
+  Adaptation,
+  ISegment,
+  Representation,
+} from "../../manifest";
 import { IBufferType } from "../source_buffers";
 import {
-  ILoadSegmentEvent
+  IAppendedSegment
 } from "./buffer_based_chooser";
 import RepresentationChooser, {
   IABREstimation,
@@ -37,6 +41,11 @@ import RepresentationChooser, {
 interface IMetricValue {
   duration: number;
   size: number;
+  content: {
+    representation: Representation;
+    adaptation: Adaptation;
+    segment: ISegment;
+  };
 }
 
 interface IMetric {
@@ -186,8 +195,8 @@ export default class ABRManager {
       .pipe(takeUntil(this._dispose$))
       .subscribe(({ type, value }) => {
         const chooser = this._lazilyCreateChooser(type);
-        const { duration, size } = value;
-        chooser.addEstimate(duration, size);
+        const { duration, size, content } = value;
+        chooser.addEstimate(duration, size, content);
       });
 
     requests$
@@ -232,10 +241,10 @@ export default class ABRManager {
     type : IBufferType,
     clock$ : Observable<IABRClockTick>,
     representations : Representation[] = [],
-    loadSegmentEvents$ : Subject<ILoadSegmentEvent>
+    appendSegment$ : Subject<IAppendedSegment>
   ) : Observable<IABREstimation> {
     return this._lazilyCreateChooser(type)
-      .get$(clock$, representations, loadSegmentEvents$);
+      .get$(clock$, representations, appendSegment$);
   }
 
   /**

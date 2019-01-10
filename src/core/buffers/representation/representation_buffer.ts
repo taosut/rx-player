@@ -81,14 +81,10 @@ import segmentFilter from "./segment_filter";
 
 import { getLeftSizeOfRange } from "../../../utils/ranges";
 
-export interface ILoadSegmentEvent {
-  type: "loaded"|"appended";
-  value: {
-    representation: Representation;
-    segment: ISegment;
-    requestTime? : number;
-    bufferGap? : number;
-  };
+export interface IAppendedSegment {
+  representation: Representation;
+  segment: ISegment;
+  bufferGap? : number;
 }
 
 // Item emitted by the Buffer's clock$
@@ -117,7 +113,7 @@ export interface IRepresentationBufferArguments<T> {
   segmentFetcher : IPrioritizedSegmentFetcher<T>;
   terminate$ : Observable<void>;
   wantedBufferAhead$ : Observable<number>;
-  loadSegmentEvents$: Subject<ILoadSegmentEvent>;
+  appendSegment$: Subject<IAppendedSegment>;
   lastStableBitrate$: BehaviorSubject<undefined|number>;
 }
 
@@ -176,7 +172,7 @@ export default function RepresentationBuffer<T>({
   segmentFetcher, // allows to download new segments
   terminate$, // signal the RepresentationBuffer that it should terminate
   wantedBufferAhead$, // emit the buffer goal,
-  loadSegmentEvents$,
+  appendSegment$,
   lastStableBitrate$,
 } : IRepresentationBufferArguments<T>) : Observable<IRepresentationBufferEvent<T>> {
   const { manifest, period, adaptation, representation } = content;
@@ -379,17 +375,6 @@ export default function RepresentationBuffer<T>({
         currentSegmentRequest = { segment, priority, request$ };
         const response$ = request$.pipe(
               mergeMap((fetchedSegment) => {
-                const { requestInfos: { receivedTime, sendingTime } } = fetchedSegment;
-                const requestTime = receivedTime != null && sendingTime != null ?
-                  receivedTime - sendingTime : undefined;
-                loadSegmentEvents$.next({
-                  type: "loaded",
-                  value: {
-                    segment,
-                    representation,
-                    requestTime,
-                  },
-                });
                 currentSegmentRequest = null;
                 const initInfos = initSegmentObject &&
                   initSegmentObject.segmentInfos || undefined;
@@ -451,13 +436,10 @@ export default function RepresentationBuffer<T>({
           const timeRanges = queuedSourceBuffer.getBuffered();
           const currentTime = videoElement.currentTime;
           const bufferGap = getLeftSizeOfRange(timeRanges, currentTime);
-          loadSegmentEvents$.next({
-            type: "appended",
-            value: {
-              representation,
-              segment,
-              bufferGap,
-            },
+          appendSegment$.next({
+            representation,
+            segment,
+            bufferGap,
           });
         }),
         mapTo(EVENTS.addedSegment(bufferType, segment, segmentData)),

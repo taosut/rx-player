@@ -30,11 +30,15 @@ import {
   switchMap,
   takeUntil,
 } from "rxjs/operators";
-import { Representation } from "../../manifest";
+import {
+  ISegment,
+  Representation,
+} from "../../manifest";
 import { IBufferType } from "../source_buffers";
 import BufferBasedChooser, {
-  ILoadSegmentEvent
+  IAppendedSegment
 } from "./buffer_based_chooser";
+import EWMA from "./ewma";
 import filterByBitrate from "./filter_by_bitrate";
 import filterByWidth from "./filter_by_width";
 import fromBitrateCeil from "./from_bitrate_ceil";
@@ -169,6 +173,11 @@ export default class RepresentationChooser {
   private readonly _throttle$ : Observable<number>|undefined;
   private readonly _throughputChooser : ThroughputChooser;
 
+  private _scoreData$ : BehaviorSubject<undefined|{
+    representation: Representation;
+    EWMA: EWMA;
+  }>;
+
   /**
    * @param {Object} options
    */
@@ -176,6 +185,10 @@ export default class RepresentationChooser {
     this._throughputChooser = new ThroughputChooser(options.initialBitrate || 0);
 
     this._dispose$ = new Subject();
+    this._scoreData$ = new BehaviorSubject<undefined|{
+      representation: Representation;
+      EWMA: EWMA;
+    }>(undefined);
 
     this.manualBitrate$ = new BehaviorSubject(
       options.manualBitrate != null ?
@@ -194,7 +207,7 @@ export default class RepresentationChooser {
   public get$(
     clock$: Observable<IRepresentationChooserClockTick>,
     representations : Representation[],
-    loadSegmentEvents$ : Subject<ILoadSegmentEvent>
+    appendSegment$ : Subject<IAppendedSegment>
   ): Observable<IABREstimation> {
     if (!representations.length) {
       throw new Error("ABRManager: no representation choice given");
@@ -249,21 +262,28 @@ export default class RepresentationChooser {
       let lastEstimatedBitrate: number|undefined;
       let lastEstimationMode: "bandwidth"|"BOLA"|undefined = "bandwidth";
       const bufferBasedEstimation$ =
-        BufferBasedChooser(loadSegmentEvents$, representations);
+        BufferBasedChooser(
+          appendSegment$,
+          this._scoreData$.pipe(filter((e): e is {
+            representation: Representation;
+            EWMA: EWMA;
+          } => !!e)),
+          representations
+        );
 
       return observableCombineLatest(
         clock$,
         maxAutoBitrate$,
         deviceEvents$,
-        bufferBasedEstimation$.pipe(
-          startWith({ representation: undefined, score: undefined })
-        )
+        bufferBasedEstimation$.pipe(startWith(undefined)),
+        this._scoreData$.pipe(startWith(undefined))
       ).pipe(
         map(([
           clock,
           maxAutoBitrate,
           deviceEvents,
-          { representation: chosenRepFromBufferBasedABR, score },
+          chosenRepFromBufferBasedABR,
+          scoreData,
         ]): IABREstimation|undefined => {
           const _representations =
             getFilteredRepresentations(representations, deviceEvents);
@@ -299,6 +319,13 @@ export default class RepresentationChooser {
             return lastEstimationMode;
           })();
 
+          console.log("!!! MODE", lastEstimationMode);
+
+          const lastStableBitrate = scoreData ?
+            scoreData.EWMA.getEstimate() > 1 ?
+              scoreData.representation.bitrate : undefined :
+            undefined;
+
           if (lastEstimationMode === "BOLA" && chosenRepFromBufferBasedABR != null) {
             return {
               bitrate: bandwidthEstimate,
@@ -306,9 +333,7 @@ export default class RepresentationChooser {
               urgent: this._throughputChooser.isUrgent(
                 chosenRepFromBufferBasedABR.bitrate, clock),
               manual: false,
-              lastStableBitrate: score && score > 1 ?
-                chosenRepFromBufferBasedABR.bitrate :
-                undefined,
+              lastStableBitrate,
             };
           } else if (lastEstimationMode === "bandwidth") {
             return {
@@ -317,9 +342,7 @@ export default class RepresentationChooser {
               urgent: this._throughputChooser.isUrgent(
                 chosenRepFromBandwidth.bitrate, clock),
               manual: false,
-              lastStableBitrate: (score && score > 1 && chosenRepFromBufferBasedABR) ?
-                chosenRepFromBufferBasedABR.bitrate :
-                undefined,
+              lastStableBitrate,
             };
           }
         }),
@@ -340,7 +363,33 @@ export default class RepresentationChooser {
    * @param {number} duration
    * @param {number} size
    */
-  public addEstimate(duration : number, size : number) : void {
+  public addEstimate(duration : number, size : number, content: {
+      segment: ISegment; representation: Representation;
+    }) : void {
+    const { segment, representation } = content;
+    if (segment.duration != null) {
+      const quality =
+        (segment.duration / segment.timescale) / (duration / 1000);
+      const scoreData = this._scoreData$.getValue();
+      if (
+        !scoreData ||
+        representation.id !== scoreData.representation.id
+      ) {
+        const newEWMA = new EWMA(5);
+        newEWMA.addSample(1, quality);
+        this._scoreData$.next({
+          representation,
+          EWMA: newEWMA,
+        });
+      } else {
+        const { EWMA: newEWMA } = scoreData;
+        newEWMA.addSample(1, quality);
+        this._scoreData$.next({
+          representation: scoreData.representation,
+          EWMA: newEWMA,
+        });
+      }
+    }
     this._throughputChooser.addEstimate(duration, size);
   }
 

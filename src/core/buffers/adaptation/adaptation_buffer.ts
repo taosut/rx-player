@@ -58,7 +58,7 @@ import { IPrioritizedSegmentFetcher } from "../../pipelines";
 import { QueuedSourceBuffer } from "../../source_buffers";
 import EVENTS from "../events_generators";
 import RepresentationBuffer, {
-  ILoadSegmentEvent,
+  IAppendedSegment,
   IRepresentationBufferClockTick,
 } from "../representation";
 import SegmentBookkeeper from "../segment_bookkeeper";
@@ -128,7 +128,7 @@ export default function AdaptationBuffer<T>(
     return objectAssign({ downloadBitrate }, tick);
   }));
 
-  const loadSegmentEvents$ = new Subject<ILoadSegmentEvent>();
+  const appendSegment$ = new Subject<IAppendedSegment>();
   const lastStableBitrate$ = new BehaviorSubject<undefined|number>(undefined);
 
   const abr$ : Observable<IABREstimation> =
@@ -136,7 +136,7 @@ export default function AdaptationBuffer<T>(
       adaptation.type,
       abrClock$,
       adaptation.representations,
-      loadSegmentEvents$
+      appendSegment$
     ).pipe(
       tap(({ lastStableBitrate }) => {
         lastStableBitrate$.next(lastStableBitrate);
@@ -223,7 +223,7 @@ export default function AdaptationBuffer<T>(
         segmentFetcher,
         terminate$: terminateCurrentBuffer$,
         wantedBufferAhead$,
-        loadSegmentEvents$,
+        appendSegment$,
         lastStableBitrate$,
       });
     });

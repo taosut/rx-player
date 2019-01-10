@@ -135,6 +135,7 @@ export default function createSegmentFetcher<T>(
                 value: {
                   size,
                   duration,
+                  content,
                 },
               });
             }
