@@ -22,59 +22,16 @@ be the most adapted, that is the quality which:
     network to handle would lead to excessive re-bufferings, but a too low would
     be not as pleasant to watch)
 
+In order to estimate the quality that maximizes the playback experience, the ABR 
+relies on two "chooser". The [throughtput chooser](./throughput_chooser.md) picks a quality from bandwidth
+estimations. The [buffer based chooser](./buffer_based_chooser.md) relies on buffering conditions to make his
+choices.
 
-## ABR Algorithm ###############################################################
+As a chooser might be more appropriate for a specific playback condition, we
+switch dynamically between choosers to select the final adequate quality :
 
-                 Long
-                 (normal mode) [2]  +----------------+
-                          +---------+ Buffer Gap [1] +-------+
-                          |         +----------------+       |
-                   +------v-----+                            |
-                   | Request(s) |                            |
-                   | datas      |                     Short
-                   +-----+------+                     (starvation mode) [4]
-                         |
-                         |                                   |
-    Request time length  |                                   |
-    Data size            |                                   |
-                         |                                   |
-+----------------------+ v +---------------------+   +-------v------+
-| Short term EWMA [2a] |   | Long term EWMA [2b] |   | Last request |
-+----------------+-----+   +-----+---------------+   +-------+------+
-                 |               |                           |
-             +---+---------------+---+       +---------------v------------+
-             | Ceil bitrate (minimum |       | Ceil bitrate               |
-             | between both) [3]     |       | (bandwidth estimation from |
-             +-----------+-----------+       | last request [5]           |
-                         |                   +--------------------+-------+
-                         |                                        |
-                    +----v----+       +-----------+        +------v--+
-                    | Bitrate <-------+ Available +--------> Bitrate |
-                    | ceiling |       | qualities |        | ceiling |
-                    +----+----+       +-----------+        +-----+---+
-                         |                                       |
-                         |         +----------------+            |
-                         +---------> Chosen quality <------------+
-                                   +----------------+
+## Choosers dynamic switch #####################################################
 
-[1] The buffer gap is the distance between the current time and the buffer time
-edge. Our ABR algorithm relies on it.
 
-[2] If the buffer gap is long (more than 5 seconds in our current configuration):
-From requests computed bandwidths (data size / request time), calculate two
-[EWMA](https://en.wikipedia.org/wiki/EWMA).
 
-[2a] The first, a fast-moving average, falls quickly when estimated bandwidth
-falls suddenly.
 
-[2b] The second, a slow-moving average, is a bandwidth mean.
-
-[3] For quality of service, the player should adapt down quickly, to avoid
-buffering situations, and grow up slowly, in order to smoothly change quality.
-For this reason, the minimum between the two estimated is considered as a
-bitrate threshold. The chosen quality is a quality's bitrate ceiling.
-
-[4] If the buffer gap is too short, it is considered as "starving":
-
-[5] An immediate bandwidth is computed from last or current request.
-The quality's bitrate ceiling relies on it to return the chose quality.
