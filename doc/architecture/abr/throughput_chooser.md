@@ -1,42 +1,42 @@
 # ABRManager - Throughput Chooser ##############################################
 
-
                  Long
-                 (normal mode) [2]  +----------------+
-                          +---------+ Buffer Gap [1] +-------+
-                          |         +----------------+       |
-                   +------v-----+                            |
-                   | Request(s) |                            |
-                   | datas      |                     Short
-                   +-----+------+                     (starvation mode) [4]
-                         |
+                 (normal mode) [2]
+                         +----------+ Buffer Gap [1] +-------+
+                         |                                   |
+                         v                                   |Short
+                     Request(s)                              |(starvation mode)
+                     datas                                   |[4]
+                         +                                   |
+                         |                                   |
                          |                                   |
     Request time length  |                                   |
     Data size            |                                   |
                          |                                   |
-+----------------------+ v +---------------------+   +-------v------+
-| Short term EWMA [2a] |   | Long term EWMA [2b] |   | Last request |
-+----------------+-----+   +-----+---------------+   +-------+------+
++- - - - - - - - - - - + v +- - - - - - - - - - -+           v
+| Short term EWMA [2a] |   | Long term EWMA [2b] |     Last request
++- - - - - - - - + - - +   +- - -+- - - - - - - -+           +
                  |               |                           |
-             +---+---------------+---+       +---------------v------------+
+             + - + - - - - - - - + - +       +- - - - - - - -v- - - - - - +
              | Ceil bitrate (minimum |       | Ceil bitrate               |
              | between both) [3]     |       | (bandwidth estimation from |
-             +-----------+-----------+       | last request [5]           |
-                         |                   +--------------------+-------+
-                         |                                        |
-                    +----v----+       +-----------+        +------v--+
-                    | Bitrate <-------+ Available +--------> Bitrate |
-                    | ceiling |       | qualities |        | ceiling |
-                    +----+----+       +-----------+        +-----+---+
+             + - - - - - + - - - - - +       | last request [5]           |
+                         |        ^          + - - - - - - - - - -+- - - -+
+                         |        |                   ^           |
+                         v        |                   |           v
+                      Bitrate     +---+ Available +---+      Bitrate
+                      ceiling           qualities            ceiling
+                         +                                       +
                          |                                       |
-                         |         +----------------+            |
+                         |                                       |
                          +---------> Chosen quality <------------+
-                                   +----------------+
+
+
 
 [1] The buffer gap is the distance between the current time and the buffer time
-edge. Our ABR algorithm relies on it.
+edge.
 
-[2] If the buffer gap is long (more than 5 seconds in our current configuration):
+[2] If the buffer gap is long (more than 5 seconds in default configuration):
 From requests computed bandwidths (data size / request time), calculate two
 [EWMA](https://en.wikipedia.org/wiki/EWMA).
 
