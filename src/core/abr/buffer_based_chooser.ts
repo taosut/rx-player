@@ -103,27 +103,20 @@ export default function BufferBasedChooser(
     .map((_, i) => minBufferLevelForRepresentation(i));
 
   /**
-   * XXX TODO
    * Get minimum buffer we should keep ahead to pick this Representation.
    * @param {number} index
    * @returns {number}
    */
   function minBufferLevelForRepresentation(index: number): number {
-    const repBitrate = bitrates[index];
-    const repUtility = utilities[index];
-    let min = 0;
-    for (let i = index - 1; i >= 0; --i) {
-      if (utilities[i] < utilities[index]) {
-        const iBitrate = bitrates[i];
-        const iUtility = utilities[i];
-        const level = Vp *
-          (gp + (repBitrate * iUtility - iBitrate * repUtility) /
-            (repBitrate - iBitrate));
-        min = Math.max(min, level);
-      }
+    if (index < 1 && index >= bitrates.length) {
+      log.warn("ABR: Trying to get min buffer level of out-of-bound representation.");
     }
-    return min;
+    const boundedIndex = Math.min(Math.max(0, index), bitrates.length - 1);
+    return Vp * (gp + (bitrates[boundedIndex] * utilities[boundedIndex - 1] -
+      bitrates[boundedIndex - 1] * utilities[boundedIndex]) / (bitrates[boundedIndex] -
+      bitrates[boundedIndex - 1]));
   }
+
   console.log("??????", bitrates.map((_r : any, i : number) => {
     return minBufferLevelForRepresentation(i);
   }));
