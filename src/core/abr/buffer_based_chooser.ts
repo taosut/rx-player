@@ -26,46 +26,45 @@ import arrayFindIndex from "../../utils/array_find_index";
  * @param {number} bufferGap
  * @param {Object} scoreData
  * @param {Object|undefined} lastChoosenRepresentation
- * @returns {Object}
+ * @returns {Object|undefined}
  */
 function getEstimateFromBufferLevels(
-  representations : Representation[],
+  bitrates : number[],
   currentRepresentation : Representation,
   bufferLevels : number[],
   bufferGap : number,
   score? : number
-) : Representation {
-  const currentScoreIndex = arrayFindIndex(representations, (r) => {
-    return r.id === currentRepresentation.id;
+) : number|undefined {
+  const currentScoreIndex = arrayFindIndex(bitrates, (bitrate) => {
+    return bitrate === currentRepresentation.bitrate;
   });
   if (currentScoreIndex < 0 || currentScoreIndex > bufferLevels.length) {
     log.error("ABR: Current Representation not found in the calculated levels");
-    return representations[0];
+    return bitrates[0];
   }
 
   if (score == null || score > 1) {
     const minBufferLevel = bufferLevels[currentScoreIndex + 1];
     if (bufferGap && bufferGap > minBufferLevel) {
-      const upperRep = arrayFind(representations, (r) => {
-        return r.bitrate > currentRepresentation.bitrate;
+      const upperBitrate = arrayFind(bitrates, (bitrate) => {
+        return bitrate > currentRepresentation.bitrate;
       });
-      return upperRep || currentRepresentation;
+      return upperBitrate != null ? upperBitrate : currentRepresentation.bitrate;
     }
   }
 
   if (score == null || score < 1.15) {
     const minBufferLevel = bufferLevels[currentScoreIndex + 1];
     if (!bufferGap || bufferGap < minBufferLevel * 0.8) {
-      const downerRepIndex = arrayFindIndex(representations, (r, i) => {
-        const lastRep = representations[i - 1];
-        return lastRep && lastRep.bitrate < currentRepresentation.bitrate &&
-          r.id === currentRepresentation.id;
+      const downerBitrateIndex = arrayFindIndex(bitrates, (bitrate, i) => {
+        return i >= 1 && bitrates[i - 1] < currentRepresentation.bitrate &&
+          bitrate === currentRepresentation.bitrate;
       }) - 1;
-      return representations[downerRepIndex] || currentRepresentation;
+      return bitrates[downerBitrateIndex] != null ?
+        bitrates[downerBitrateIndex] : currentRepresentation.bitrate;
     }
   }
-
-  return currentRepresentation;
+  return currentRepresentation.bitrate;
 }
 
 /**
@@ -79,9 +78,8 @@ function getEstimateFromBufferLevels(
  * "maintanable" or not.
  * If so, we may switch to a better quality, or conversely to a worse quality.
  *
- * @param {Observable} appendedSegment
- * @param {Observable} scoreProcessor$
- * @param {Array.<Object>} representations
+ * @param {Observable} update$
+ * @param {Array.<number>} bitrates
  * @returns {Observable}
  */
 export default function BufferBasedChooser(
@@ -90,19 +88,18 @@ export default function BufferBasedChooser(
     currentRepresentation? : Representation|null;
     currentScore? : number;
   }>,
-  representations: Representation[]
-) : Observable<Representation|null> {
-  const bitrates = representations.map((r) => r.bitrate);
-  const logs = representations
-    .map((r) => Math.log(r.bitrate / representations[0].bitrate));
+  bitrates: number[]
+) : Observable<number|undefined> {
+  const logs = bitrates
+    .map((r) => Math.log(bitrates[r] / bitrates[0]));
   const utilities = logs.map(l => l - logs[0] + 1); // normalize
   const gp =
     // 20 is the buffer gap when we want to reach maximum quality.
     (utilities[utilities.length - 1] - 1) /
-    ((representations.length * 2) + 10);
+    ((bitrates.length * 2) + 10);
   const Vp = 1 / gp;
 
-  const levelsMap : number[] = representations
+  const levelsMap : number[] = bitrates
     .map((_, i) => minBufferLevelForRepresentation(i));
 
   /**
@@ -127,17 +124,17 @@ export default function BufferBasedChooser(
     }
     return min;
   }
+  console.log("??????", bitrates.map((_r : any, i : number) => {
+    return minBufferLevelForRepresentation(i);
+  }));
 
   return update$
     .pipe(map(({ bufferGap, currentRepresentation, currentScore }) => {
-      console.log("??????", representations.map((_r : any, i : number) => {
-        return minBufferLevelForRepresentation(i);
-      }));
       if (currentRepresentation == null) {
-        return null; // XXX TODO
+        return undefined;
       }
       return getEstimateFromBufferLevels(
-        representations,
+        bitrates,
         currentRepresentation,
         levelsMap,
         bufferGap,

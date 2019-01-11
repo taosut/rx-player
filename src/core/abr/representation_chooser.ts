@@ -236,21 +236,18 @@ export default class RepresentationChooser {
     mediaElement : HTMLMediaElement,
     options : IRepresentationChooserOptions
   ) {
-    this._networkAnalyzer = new NetworkAnalyzer(options.initialBitrate || 0);
-
     this._dispose$ = new Subject();
     this._scoreEstimator = null;
+    this._networkAnalyzer = new NetworkAnalyzer(options.initialBitrate || 0);
+    this._mediaElement = mediaElement;
+    this._limitWidth$ = options.limitWidth$;
+    this._throttle$ = options.throttle$;
 
     this.manualBitrate$ = new BehaviorSubject(
       options.manualBitrate != null ? options.manualBitrate : -1);
 
     this.maxAutoBitrate$ = new BehaviorSubject(
       options.maxAutoBitrate != null ? options.maxAutoBitrate : Infinity);
-
-    this._limitWidth$ = options.limitWidth$;
-    this._throttle$ = options.throttle$;
-
-    this._mediaElement = mediaElement;
   }
 
   public get$(
@@ -316,8 +313,10 @@ export default class RepresentationChooser {
           return { bufferGap, currentRepresentation, currentScore };
         })
       );
+
+      const bitrates = representations.map(r => r.bitrate);
       const bufferBasedEstimation$ =
-        BufferBasedChooser(updateBufferEstimation$, representations);
+        BufferBasedChooser(updateBufferEstimation$, bitrates);
 
       return observableCombineLatest(
         clock$,
@@ -329,7 +328,7 @@ export default class RepresentationChooser {
           clock,
           maxAutoBitrate,
           deviceEvents,
-          chosenRepFromBufferBasedABR,
+          bufferBasedBitrate,
         ]): IABREstimation => {
           const _representations =
             getFilteredRepresentations(representations, deviceEvents);
@@ -379,8 +378,8 @@ export default class RepresentationChooser {
           }
 
           if (
-            chosenRepFromBufferBasedABR == null ||
-            chosenRepFromBandwidth.bitrate >= chosenRepFromBufferBasedABR.bitrate
+            bufferBasedBitrate == null ||
+            chosenRepFromBandwidth.bitrate >= bufferBasedBitrate
           ) {
             return {
               bitrate: bandwidthEstimate,
@@ -391,11 +390,13 @@ export default class RepresentationChooser {
               lastStableBitrate,
             };
           }
+          const chosenRepresentation =
+            fromBitrateCeil(_representations, bufferBasedBitrate) || _representations[0];
           return {
             bitrate: bandwidthEstimate,
-            representation: chosenRepFromBufferBasedABR,
-            urgent: this._networkAnalyzer.isUrgent(
-              chosenRepFromBufferBasedABR.bitrate, clock),
+            representation: chosenRepresentation,
+            urgent: this._networkAnalyzer
+              .isUrgent(bufferBasedBitrate, clock),
             manual: false,
             lastStableBitrate,
           };
@@ -483,7 +484,6 @@ export default class RepresentationChooser {
     this._dispose$.complete();
     this.manualBitrate$.complete();
     this.maxAutoBitrate$.complete();
-    this._networkAnalyzer.dispose();
   }
 }
 

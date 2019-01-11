@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { Subject } from "rxjs";
 import config from "../../config";
 import log from "../../log";
 import arrayFind from "../../utils/array_find";
@@ -202,14 +201,12 @@ export default class NetworkAnalyzer {
   private _inStarvationMode: boolean;
   private _currentRequests: Partial<Record<string, IRequestInfo>>;
   private _initialBitrate: number;
-  private readonly _reEstimate$ : Subject<void>;
 
   constructor(initialBitrate: number) {
     this._initialBitrate = initialBitrate;
     this._estimator = new BandwidthEstimator();
     this._inStarvationMode = false;
     this._currentRequests = {};
-    this._reEstimate$ = new Subject<void>();
   }
 
   public getBandwidthEstimate(
@@ -286,10 +283,7 @@ export default class NetworkAnalyzer {
    * @param {number} size
    */
   public addEstimate(duration : number, size : number) : void {
-    if (duration != null && size != null) {
-      this._estimator.addSample(duration, size);
-      this._reEstimate$.next();
-    }
+    this._estimator.addSample(duration, size);
   }
 
   /**
@@ -404,7 +398,7 @@ export default class NetworkAnalyzer {
   public isUrgent(
     bitrate: number,
     clockTick: INetworkAnalizerClockTick
-   ) {
+   ) : boolean {
     if (clockTick.downloadBitrate == null) {
       return true;
     } else if (bitrate === clockTick.downloadBitrate) {
@@ -413,13 +407,5 @@ export default class NetworkAnalyzer {
       return !this._inStarvationMode;
     }
     return this.shouldDirectlySwitchToLowBitrate(clockTick);
-  }
-
-  /**
-   * Free up the resources used by the RepresentationChooser.
-   */
-  public dispose() : void {
-    this._reEstimate$.next();
-    this._reEstimate$.complete();
   }
 }
