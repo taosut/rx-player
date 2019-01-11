@@ -1,5 +1,6 @@
 # ABRManager - Buffer based chooser ############################################
 
+```
                               Qualities
                                   +
                                   |
@@ -12,7 +13,7 @@
          v                +- - - - - - - - - - - - -+           |
       buffer gap +------> | Compute optimal quality | <---------+
                           +- - - - - - - - - - - - -+
-
+```
 
 
 [BOLA Algorithm](https://arxiv.org/pdf/1601.06748.pdf) finds optimal quality
@@ -21,6 +22,7 @@ value to minimize playback buffering and maximize buffered quality.
 [1] BOLA broadly defines minimum buffer steps for which we can allow to download
 a quality:
 
+```
                 ^
 Bitrates (kb/s) |
                 |
@@ -36,6 +38,7 @@ Bitrates (kb/s) |
                        5      10     15     20
 
                                  Buffer gap (s)
+```
 
 [2] The BOLA estimation is computed each time a segment is appended (thus buffer
 gap is updated).

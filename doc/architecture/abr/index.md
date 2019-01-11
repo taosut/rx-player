@@ -23,14 +23,14 @@ be the most adapted, that is the quality which:
 
 In order to estimate the quality that maximizes the playback experience, the ABR 
 relies on two "chooser". The [throughtput chooser](./throughput_chooser.md)
-picks a quality from network conditions. The [buffer based chooser]
-(./buffer_based_chooser.md) relies on buffering conditions to make his choices.
+picks a quality from network conditions. The [buffer based chooser](./buffer_based_chooser.md) relies on buffering conditions to make his choices.
 
 As a chooser might be more appropriate for a specific playback condition, we
 switch dynamically between choosers to select the final adequate quality :
 
 ## Choosers dynamic switch #####################################################
 
+```
       +-----------------------------+------------------------------------------+
       |                             |                                          |
 +-----v------+          +-----------v------+                                   |
@@ -73,7 +73,4 @@ switch dynamically between choosers to select the final adequate quality :
                    |
                    v
                 quality
-
-
-
-
+```

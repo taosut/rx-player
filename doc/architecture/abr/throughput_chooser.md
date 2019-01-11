@@ -1,5 +1,6 @@
 # ABRManager - Throughput Chooser ##############################################
 
+```
                  Long
                  (normal mode) [2]
                          +----------+ Buffer Gap [1] +-------+
@@ -30,8 +31,7 @@
                          |                                       |
                          |                                       |
                          +---------> Chosen quality <------------+
-
-
+```
 
 [1] The buffer gap is the distance between the current time and the buffer time
 edge.
