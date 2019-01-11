@@ -40,7 +40,7 @@ import EWMA from "./ewma";
 import filterByBitrate from "./filter_by_bitrate";
 import filterByWidth from "./filter_by_width";
 import fromBitrateCeil from "./from_bitrate_ceil";
-import ThroughputChooser from "./throughput_chooser";
+import NetworkAnalyzer from "./network_analyzer";
 
 import { getLeftSizeOfRange } from "../../utils/ranges";
 
@@ -218,7 +218,9 @@ export default class RepresentationChooser {
   private readonly _dispose$ : Subject<void>;
   private readonly _limitWidth$ : Observable<number>|undefined;
   private readonly _throttle$ : Observable<number>|undefined;
-  private readonly _throughputChooser : ThroughputChooser;
+  private readonly _networkAnalyzer : NetworkAnalyzer;
+
+  private _mediaElement : HTMLMediaElement;
 
   /**
    * Score estimator for the current Representation.
@@ -230,8 +232,11 @@ export default class RepresentationChooser {
   /**
    * @param {Object} options
    */
-  constructor(options : IRepresentationChooserOptions) {
-    this._throughputChooser = new ThroughputChooser(options.initialBitrate || 0);
+  constructor(
+    mediaElement : HTMLMediaElement,
+    options : IRepresentationChooserOptions
+  ) {
+    this._networkAnalyzer = new NetworkAnalyzer(options.initialBitrate || 0);
 
     this._dispose$ = new Subject();
     this._scoreEstimator = null;
@@ -244,6 +249,8 @@ export default class RepresentationChooser {
 
     this._limitWidth$ = options.limitWidth$;
     this._throttle$ = options.throttle$;
+
+    this._mediaElement = mediaElement;
   }
 
   public get$(
@@ -301,8 +308,7 @@ export default class RepresentationChooser {
       const updateBufferEstimation$ = bufferEvents$.pipe(
         filter((e) : e is IBufferEventAddedSegment => e.type === "added-segment"),
         map((addedSegmentEvt) => {
-          // XXX TODO
-          const currentTime = document.getElementsByTagName("video")[0].currentTime;
+          const { currentTime } = this._mediaElement;
           const timeRanges = addedSegmentEvt.value.buffered;
           const bufferGap = getLeftSizeOfRange(timeRanges, currentTime);
           const currentScore = this._scoreEstimator == null ?
@@ -327,12 +333,11 @@ export default class RepresentationChooser {
         ]): IABREstimation => {
           const _representations =
             getFilteredRepresentations(representations, deviceEvents);
+          const { bandwidthEstimate, bitrateChosen } = this._networkAnalyzer
+            .getBandwidthEstimate(clock, maxAutoBitrate, lastEstimatedBitrate);
+          const chosenRepFromBandwidth =
+            fromBitrateCeil(_representations, bitrateChosen) || _representations[0];
 
-          const {
-            bandwidthEstimate,
-            representation: chosenRepFromBandwidth,
-          } = this._throughputChooser.getBandwidthEstimate(
-            _representations, clock, maxAutoBitrate, lastEstimatedBitrate);
           lastEstimatedBitrate = bandwidthEstimate;
 
           const { bufferGap } = clock;
@@ -366,7 +371,7 @@ export default class RepresentationChooser {
             return {
               bitrate: bandwidthEstimate,
               representation: chosenRepFromBandwidth,
-              urgent: this._throughputChooser
+              urgent: this._networkAnalyzer
                 .isUrgent(chosenRepFromBandwidth.bitrate, clock),
               manual: false,
               lastStableBitrate,
@@ -380,7 +385,7 @@ export default class RepresentationChooser {
             return {
               bitrate: bandwidthEstimate,
               representation: chosenRepFromBandwidth,
-              urgent: this._throughputChooser
+              urgent: this._networkAnalyzer
                 .isUrgent(chosenRepFromBandwidth.bitrate, clock),
               manual: false,
               lastStableBitrate,
@@ -389,7 +394,7 @@ export default class RepresentationChooser {
           return {
             bitrate: bandwidthEstimate,
             representation: chosenRepFromBufferBasedABR,
-            urgent: this._throughputChooser.isUrgent(
+            urgent: this._networkAnalyzer.isUrgent(
               chosenRepFromBufferBasedABR.bitrate, clock),
             manual: false,
             lastStableBitrate,
@@ -418,7 +423,7 @@ export default class RepresentationChooser {
     size : number,
     content: { segment: ISegment } // XXX TODO compare with current representation?
   ) : void {
-    this._throughputChooser.addEstimate(duration, size); // calculate bandwidth
+    this._networkAnalyzer.addEstimate(duration, size); // calculate bandwidth
 
     // calculate "maintainability score"
     const { segment } = content;
@@ -446,7 +451,7 @@ export default class RepresentationChooser {
    * @param {Object} payload
    */
   public addPendingRequest(id : string|number, payload: IBeginRequest) : void {
-    this._throughputChooser.addPendingRequest(id, payload);
+    this._networkAnalyzer.addPendingRequest(id, payload);
   }
 
   /**
@@ -458,7 +463,7 @@ export default class RepresentationChooser {
    * @param {Object} progress
    */
   public addRequestProgress(id : string|number, progress: IProgressRequest) : void {
-    this._throughputChooser.addRequestProgress(id, progress);
+    this._networkAnalyzer.addRequestProgress(id, progress);
   }
 
   /**
@@ -467,7 +472,7 @@ export default class RepresentationChooser {
    * @param {string|number} id
    */
   public removePendingRequest(id : string|number) : void {
-    this._throughputChooser.removePendingRequest(id);
+    this._networkAnalyzer.removePendingRequest(id);
   }
 
   /**
@@ -478,7 +483,7 @@ export default class RepresentationChooser {
     this._dispose$.complete();
     this.manualBitrate$.complete();
     this.maxAutoBitrate$.complete();
-    this._throughputChooser.dispose();
+    this._networkAnalyzer.dispose();
   }
 }
 

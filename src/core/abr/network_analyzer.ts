@@ -17,23 +17,21 @@
 import { Subject } from "rxjs";
 import config from "../../config";
 import log from "../../log";
-import { Representation } from "../../manifest";
 import arrayFind from "../../utils/array_find";
 import objectValues from "../../utils/object_values";
 import { IBufferType } from "../source_buffers";
 import BandwidthEstimator from "./bandwidth_estimator";
 import EWMA from "./ewma";
-import fromBitrateCeil from "./from_bitrate_ceil";
 
 const {
-    ABR_REGULAR_FACTOR,
-    ABR_STARVATION_DURATION_DELTA,
-    ABR_STARVATION_FACTOR,
-    ABR_STARVATION_GAP,
-    OUT_OF_STARVATION_GAP,
-  } = config;
+  ABR_REGULAR_FACTOR,
+  ABR_STARVATION_DURATION_DELTA,
+  ABR_STARVATION_FACTOR,
+  ABR_STARVATION_GAP,
+  OUT_OF_STARVATION_GAP,
+} = config;
 
-interface IRepresentationChooserClockTick {
+interface INetworkAnalizerClockTick {
   downloadBitrate : number|undefined; // bitrate of the currently downloaded
                                       // segments, in bit per seconds
   bufferGap : number; // time to the end of the buffer, in seconds
@@ -148,7 +146,7 @@ function estimateRemainingTime(
  */
 function estimateStarvationModeBitrate(
   pendingRequests : Partial<Record<string, IRequestInfo>>,
-  clock : IRepresentationChooserClockTick,
+  clock : INetworkAnalizerClockTick,
   lastEstimatedBitrate : number|undefined
 ) : number|undefined {
   const nextNeededPosition = clock.currentTime + clock.bufferGap;
@@ -195,9 +193,11 @@ function estimateStarvationModeBitrate(
 }
 
 /**
- * Estimates bandwidth and chooses the maximum downloadable representation.
+ * Analyze the current network conditions and give a bandwidth estimate as well
+ * as a maximum bitrate a Representation should be.
+ * @class NetworkAnalyzer
  */
-export default class ThroughputChooser {
+export default class NetworkAnalyzer {
   private _estimator: BandwidthEstimator;
   private _inStarvationMode: boolean;
   private _currentRequests: Partial<Record<string, IRequestInfo>>;
@@ -213,11 +213,10 @@ export default class ThroughputChooser {
   }
 
   public getBandwidthEstimate(
-    representations: Representation[],
-    clockTick: IRepresentationChooserClockTick,
+    clockTick: INetworkAnalizerClockTick,
     maxAutoBitrate: number,
     lastEstimatedBitrate: number|undefined
-  ) {
+  ) : { bandwidthEstimate? : number; bitrateChosen : number } {
     let newBitrateCeil; // bitrate ceil for the chosen Representation
     let bandwidthEstimate;
     const { bufferGap, currentTime, duration } = clockTick;
@@ -276,13 +275,7 @@ export default class ThroughputChooser {
       newBitrateCeil /= clockTick.speed;
     }
 
-    const chosenRepresentation =
-      fromBitrateCeil(representations, newBitrateCeil) || representations[0];
-
-    return {
-      bandwidthEstimate,
-      representation: chosenRepresentation,
-    };
+    return { bandwidthEstimate, bitrateChosen: newBitrateCeil };
   }
 
   /**
@@ -367,7 +360,7 @@ export default class ThroughputChooser {
    * @param {Object} clock
    */
   public shouldDirectlySwitchToLowBitrate(
-   clock : IRepresentationChooserClockTick
+   clock : INetworkAnalizerClockTick
   ) : boolean {
    const nextNeededPosition = clock.currentTime + clock.bufferGap;
    const requests = objectValues(this._currentRequests)
@@ -410,7 +403,7 @@ export default class ThroughputChooser {
    */
   public isUrgent(
     bitrate: number,
-    clockTick: IRepresentationChooserClockTick
+    clockTick: INetworkAnalizerClockTick
    ) {
     if (clockTick.downloadBitrate == null) {
       return true;

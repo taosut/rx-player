@@ -91,7 +91,7 @@ export default function BufferBasedChooser(
     currentScore? : number;
   }>,
   representations: Representation[]
-): Observable<Representation|null> {
+) : Observable<Representation|null> {
   const bitrates = representations.map((r) => r.bitrate);
   const logs = representations
     .map((r) => Math.log(r.bitrate / representations[0].bitrate));
@@ -112,16 +112,16 @@ export default function BufferBasedChooser(
    * @returns {number}
    */
   function minBufferLevelForRepresentation(index: number): number {
-    const qBitrate = bitrates[index];
-    const qUtility = utilities[index];
+    const repBitrate = bitrates[index];
+    const repUtility = utilities[index];
     let min = 0;
     for (let i = index - 1; i >= 0; --i) {
       if (utilities[i] < utilities[index]) {
         const iBitrate = bitrates[i];
         const iUtility = utilities[i];
         const level = Vp *
-          (gp + (qBitrate * iUtility - iBitrate * qUtility) /
-            (qBitrate - iBitrate));
+          (gp + (repBitrate * iUtility - iBitrate * repUtility) /
+            (repBitrate - iBitrate));
         min = Math.max(min, level);
       }
     }
