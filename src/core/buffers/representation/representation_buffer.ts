@@ -113,7 +113,6 @@ export interface IRepresentationBufferArguments<T> {
   segmentFetcher : IPrioritizedSegmentFetcher<T>;
   terminate$ : Observable<void>;
   wantedBufferAhead$ : Observable<number>;
-  appendSegment$: Subject<IAppendedSegment>;
   lastStableBitrate$: BehaviorSubject<undefined|number>;
 }
 
@@ -172,7 +171,6 @@ export default function RepresentationBuffer<T>({
   segmentFetcher, // allows to download new segments
   terminate$, // signal the RepresentationBuffer that it should terminate
   wantedBufferAhead$, // emit the buffer goal,
-  appendSegment$,
   lastStableBitrate$,
 } : IRepresentationBufferArguments<T>) : Observable<IRepresentationBufferEvent<T>> {
   const { manifest, period, adaptation, representation } = content;
@@ -229,8 +227,7 @@ export default function RepresentationBuffer<T>({
         .shouldRefresh(neededRange.start, neededRange.end);
 
       let neededSegments = getSegmentsNeeded(representation, neededRange)
-        .filter((segment) =>
-          shouldDownloadSegment(segment, neededRange, lastStableBitrate$.getValue()))
+        .filter((segment) => shouldDownloadSegment(segment, neededRange))
         .map((segment) => ({
           priority: getSegmentPriority(segment, timing),
           segment,
@@ -432,17 +429,14 @@ export default function RepresentationBuffer<T>({
           const end = duration && (time + duration) / timescale;
           segmentBookkeeper
             .insert(period, adaptation, representation, segment, start, end);
+        }),
+        map(() => {
           const videoElement = document.getElementsByTagName("video")[0];
           const timeRanges = queuedSourceBuffer.getBuffered();
           const currentTime = videoElement.currentTime;
           const bufferGap = getLeftSizeOfRange(timeRanges, currentTime);
-          appendSegment$.next({
-            representation,
-            segment,
-            bufferGap,
-          });
+          return EVENTS.addedSegment(bufferType, segment, bufferGap, segmentData);
         }),
-        mapTo(EVENTS.addedSegment(bufferType, segment, segmentData)),
         finalize(() => { // remove from queue
           sourceBufferWaitingQueue.remove(segment.id);
         }));
@@ -457,9 +451,9 @@ export default function RepresentationBuffer<T>({
    */
   function shouldDownloadSegment(
     segment : ISegment,
-    neededRange : { start: number; end: number },
-    lastStableBitrate? : number
+    neededRange : { start: number; end: number }
   ) : boolean {
+    const lastStableBitrate = lastStableBitrate$.getValue();
     return segmentFilter(
       segment,
       content,

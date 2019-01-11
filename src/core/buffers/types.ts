@@ -30,6 +30,7 @@ export interface IBufferEventAddedSegment<T> {
   value : {
     bufferType : IBufferType; // The type of the Representation
     segment : ISegment; // The concerned Segment
+    bufferGap : number;
     segmentData : T; // The data pushed
   };
 }

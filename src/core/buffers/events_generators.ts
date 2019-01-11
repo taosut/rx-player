@@ -77,11 +77,12 @@ const EVENTS = {
   addedSegment<T>(
     bufferType : IBufferType,
     segment : ISegment,
+    bufferGap : number,
     segmentData : T
   ) : IBufferEventAddedSegment<T> {
     return {
       type : "added-segment",
-      value : { bufferType, segment, segmentData },
+      value : { bufferType, segment, segmentData, bufferGap },
     };
   },
 

@@ -223,7 +223,6 @@ export default function AdaptationBuffer<T>(
         segmentFetcher,
         terminate$: terminateCurrentBuffer$,
         wantedBufferAhead$,
-        appendSegment$,
         lastStableBitrate$,
       });
     });

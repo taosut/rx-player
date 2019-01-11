@@ -90,7 +90,8 @@ export default function shouldDownloadSegment(
     return true;
   }
 
-  // only re-load comparatively-poor bitrates for the same adaptation.
-  const bitrateCeil = lastStableBitrate ? lastStableBitrate : Infinity;
-  return representation.bitrate > bitrateCeil;
+  if (lastStableBitrate == null) {
+    return true;
+  }
+  return representation.bitrate > lastStableBitrate;
 }
