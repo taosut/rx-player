@@ -29,9 +29,9 @@ export interface IBufferBasedChooserClockTick {
 
 /**
  * From the buffer gap, choose a representation.
- * @param {number} bufferGap
- * @param {Object} scoreData
- * @param {Object|undefined} lastChoosenRepresentation
+ * @param {Object} clockTick
+ * @param {Array.<Number>} bitrates
+ * @param {Array.<Number>} levels
  * @returns {Object|undefined}
  */
 function getEstimateFromBufferLevels(
@@ -45,7 +45,7 @@ function getEstimateFromBufferLevels(
   }
   const currentScoreIndex = arrayFindIndex(bitrates, b => b === currentBitrate);
   if (currentScoreIndex < 0 || currentScoreIndex > bufferLevels.length) {
-    log.error("ABR: Current Representation not found in the calculated levels");
+    log.error("ABR: Current Bitrate not found in the calculated levels");
     return bitrates[0];
   }
 
@@ -103,15 +103,14 @@ export default function BufferBasedChooser(
   const utilities = logs.map(l => l - logs[0] + 1); // normalize
   const gp = (utilities[utilities.length - 1] - 1) / ((bitrates.length * 2) + 10);
   const Vp = 1 / gp;
-  const levelsMap : number[] = bitrates
-    .map((_, i) => minBufferLevelForRepresentation(i));
+  const levelsMap : number[] = bitrates.map((_, i) => minBufferLevelForBitrate(i));
 
   /**
-   * Get minimum buffer we should keep ahead to pick this Representation.
+   * Get minimum buffer we should keep ahead to pick this bitrate.
    * @param {number} index
    * @returns {number}
    */
-  function minBufferLevelForRepresentation(index: number): number {
+  function minBufferLevelForBitrate(index: number): number {
     if (index < 0 && index >= bitrates.length) {
       log.warn("ABR: Trying to get min buffer level of out-of-bound representation.");
     }
@@ -125,7 +124,7 @@ export default function BufferBasedChooser(
   }
 
   console.log("??????", bitrates.map((_r : any, i : number) => {
-    return minBufferLevelForRepresentation(i);
+    return minBufferLevelForBitrate(i);
   }));
 
   return update$.pipe(map((clockTick) => {

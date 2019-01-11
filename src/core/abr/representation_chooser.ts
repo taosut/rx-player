@@ -269,8 +269,8 @@ export default class RepresentationChooser {
     }
 
     let currentRepresentation : Representation|null|undefined;
-    const { manualBitrate$, maxAutoBitrate$ }  = this;
-    const deviceEvents$ = createDeviceEvents(this._limitWidth$, this._throttle$);
+    const { manualBitrate$, maxAutoBitrate$, _limitWidth$, _throttle$ }  = this;
+    const deviceEvents$ = createDeviceEvents(_limitWidth$, _throttle$);
 
     bufferEvents$.pipe(
       filter((evt) : evt is IBufferEventRepresentationChange =>
