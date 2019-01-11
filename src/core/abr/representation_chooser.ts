@@ -35,14 +35,14 @@ import {
   Representation,
 } from "../../manifest";
 import { IBufferType } from "../source_buffers";
-import BufferBasedChooser, {
-  IAppendedSegment
-} from "./buffer_based_chooser";
+import BufferBasedChooser from "./buffer_based_chooser";
 import EWMA from "./ewma";
 import filterByBitrate from "./filter_by_bitrate";
 import filterByWidth from "./filter_by_width";
 import fromBitrateCeil from "./from_bitrate_ceil";
 import ThroughputChooser from "./throughput_chooser";
+
+import { getLeftSizeOfRange } from "../../utils/ranges";
 
 // Adaptive BitRate estimation object
 export interface IABREstimation {
@@ -107,6 +107,23 @@ interface IFilters {
   width?: number;
 }
 
+// Event emitted each time the current Representation considered changes
+interface IBufferEventRepresentationChange {
+  type : "representation-buffer-change";
+  value : { representation : Representation };
+}
+
+// Event emitted each time a segment is added
+interface IBufferEventAddedSegment {
+  type : "added-segment";
+  value : { buffered : TimeRanges };
+}
+
+// Buffer events needed by the ABRManager
+export type IABRBufferEvents =
+  IBufferEventRepresentationChange |
+  IBufferEventAddedSegment;
+
 interface IRepresentationChooserOptions {
   limitWidth$?: Observable<number>; // Emit maximum useful width
   throttle$?: Observable<number>; // Emit temporary bandwidth throttle
@@ -141,9 +158,32 @@ function getFilteredRepresentations(
   return _representations;
 }
 
-interface IRepresentationScore {
-  representation : Representation;
-  estimator : EWMA;
+/**
+ * Create Observable that merge several throttling Observables into one.
+ * @param {Observable} limitWidth$ - Emit the width at which the chosen
+ * Representation should be limited.
+ * @param {Observable} throttleBitrate$ - Emit the maximum bitrate authorized.
+ * @returns {Observable}
+ */
+function createDeviceEvents(
+  limitWidth$? : Observable<number>,
+  throttleBitrate$? : Observable<number>
+) : Observable<IFilters> {
+  const deviceEventsArray : Array<Observable<IFilters>> = [];
+
+  if (limitWidth$) {
+    deviceEventsArray.push(limitWidth$.pipe(map(width => ({ width }))));
+  }
+  if (throttleBitrate$) {
+    deviceEventsArray.push(throttleBitrate$.pipe(map(bitrate => ({ bitrate }))));
+  }
+
+  // Emit restrictions on the pools of available representations to choose
+  // from.
+  return deviceEventsArray.length ?
+    observableCombineLatest(...deviceEventsArray)
+      .pipe(map((args : IFilters[]) => objectAssign({}, ...args))) :
+    observableOf({});
 }
 
 /**
@@ -185,7 +225,7 @@ export default class RepresentationChooser {
    * null when no representation has been chosen yet.
    * @type {BehaviorSubject}
    */
-  private _representationScore$ : BehaviorSubject<IRepresentationScore|null>;
+  private _scoreEstimator : EWMA|null;
 
   /**
    * @param {Object} options
@@ -194,7 +234,7 @@ export default class RepresentationChooser {
     this._throughputChooser = new ThroughputChooser(options.initialBitrate || 0);
 
     this._dispose$ = new Subject();
-    this._representationScore$ = new BehaviorSubject<IRepresentationScore|null>(null);
+    this._scoreEstimator = null;
 
     this.manualBitrate$ = new BehaviorSubject(
       options.manualBitrate != null ? options.manualBitrate : -1);
@@ -207,9 +247,9 @@ export default class RepresentationChooser {
   }
 
   public get$(
-    clock$: Observable<IRepresentationChooserClockTick>,
     representations : Representation[],
-    appendSegment$ : Observable<IAppendedSegment>
+    clock$: Observable<IRepresentationChooserClockTick>,
+    bufferEvents$ : Observable<IABRBufferEvents>
   ): Observable<IABREstimation> {
     if (!representations.length) {
       throw new Error("ABRManager: no representation choice given");
@@ -224,26 +264,19 @@ export default class RepresentationChooser {
       });
     }
 
+    let currentRepresentation : Representation|null|undefined;
     const { manualBitrate$, maxAutoBitrate$ }  = this;
-    const _deviceEventsArray : Array<Observable<IFilters>> = [];
+    const deviceEvents$ = createDeviceEvents(this._limitWidth$, this._throttle$);
 
-    if (this._limitWidth$) {
-      _deviceEventsArray.push(
-        this._limitWidth$.pipe(map(width => ({ width })))
-      );
-    }
-    if (this._throttle$) {
-      _deviceEventsArray.push(
-        this._throttle$.pipe(map(bitrate => ({ bitrate })))
-      );
-    }
-
-    // Emit restrictions on the pools of available representations to choose
-    // from.
-    const deviceEvents$ : Observable<IFilters> = _deviceEventsArray.length ?
-      observableCombineLatest(..._deviceEventsArray)
-        .pipe(map((args : IFilters[]) => objectAssign({}, ...args))) :
-      observableOf({});
+    bufferEvents$.pipe(
+      filter((evt) : evt is IBufferEventRepresentationChange =>
+        evt.type === "representation-buffer-change"
+      ),
+      takeUntil(this._dispose$)
+    ).subscribe(evt => {
+      currentRepresentation = evt.value.representation;
+      this._scoreEstimator = null; // reset the score
+    });
 
     return manualBitrate$.pipe(switchMap(manualBitrate => {
       if (manualBitrate >= 0) {
@@ -261,25 +294,36 @@ export default class RepresentationChooser {
 
       // -- AUTO mode --
       let lastEstimatedBitrate: number|undefined;
-      let lastEstimationMode: "bandwidth"|"buffer" = "bandwidth";
-      const scoreProcessor$ = this._representationScore$
-        .pipe(filter((p): p is IRepresentationScore => !!p));
+      let forceBandwidthMode = true;
+
+      // Emit each time a buffer-based estimation should be actualized.
+      // (basically, each time a segment is added)
+      const updateBufferEstimation$ = bufferEvents$.pipe(
+        filter((e) : e is IBufferEventAddedSegment => e.type === "added-segment"),
+        map((addedSegmentEvt) => {
+          // XXX TODO
+          const currentTime = document.getElementsByTagName("video")[0].currentTime;
+          const timeRanges = addedSegmentEvt.value.buffered;
+          const bufferGap = getLeftSizeOfRange(timeRanges, currentTime);
+          const currentScore = this._scoreEstimator == null ?
+            undefined : this._scoreEstimator.getEstimate();
+          return { bufferGap, currentRepresentation, currentScore };
+        })
+      );
       const bufferBasedEstimation$ =
-        BufferBasedChooser(appendSegment$, scoreProcessor$, representations);
+        BufferBasedChooser(updateBufferEstimation$, representations);
 
       return observableCombineLatest(
         clock$,
         maxAutoBitrate$,
         deviceEvents$,
-        bufferBasedEstimation$.pipe(startWith(undefined)),
-        this._representationScore$.pipe(startWith(null))
+        bufferBasedEstimation$.pipe(startWith(undefined))
       ).pipe(
         map(([
           clock,
           maxAutoBitrate,
           deviceEvents,
           chosenRepFromBufferBasedABR,
-          scoreProcessor,
         ]): IABREstimation => {
           const _representations =
             getFilteredRepresentations(representations, deviceEvents);
@@ -291,52 +335,62 @@ export default class RepresentationChooser {
             _representations, clock, maxAutoBitrate, lastEstimatedBitrate);
           lastEstimatedBitrate = bandwidthEstimate;
 
-          lastEstimationMode = (() => {
-            if (lastEstimationMode === "bandwidth") {
-              if (
-                chosenRepFromBufferBasedABR &&
-                chosenRepFromBufferBasedABR.bitrate >= chosenRepFromBandwidth.bitrate &&
-                clock.bufferGap < Infinity &&
-                clock.bufferGap > 10
-              ) {
-                return "buffer";
-              }
+          const { bufferGap } = clock;
+          if (!forceBandwidthMode && bufferGap <= 5) {
+            forceBandwidthMode = true;
+          } else if (
+            forceBandwidthMode && Number.isFinite(bufferGap) && bufferGap > 10
+          ) {
+            forceBandwidthMode = false;
+          }
+
+          const videal = document.querySelector("video");
+          console.log(
+            "!!! MODE",
+            forceBandwidthMode,
+            this._scoreEstimator && this._scoreEstimator.getEstimate(),
+            videal && getLeftSizeOfRange(videal.buffered, videal.currentTime)
+          );
+
+          let lastStableBitrate : number|undefined;
+          if (this._scoreEstimator) {
+            if (currentRepresentation == null) {
+              lastStableBitrate = lastStableBitrate;
             } else {
-              if (
-                lastEstimationMode === "buffer" && clock.bufferGap < 5 &&
-                (
-                  !chosenRepFromBufferBasedABR ||
-                  chosenRepFromBufferBasedABR.bitrate > chosenRepFromBandwidth.bitrate
-                )
-              ) {
-                return "bandwidth";
-              }
+              lastStableBitrate = this._scoreEstimator.getEstimate() > 1 ?
+                currentRepresentation.bitrate : lastStableBitrate;
             }
-            return lastEstimationMode;
-          })();
+          }
 
-          console.log("!!! MODE", lastEstimationMode);
-
-          const lastStableBitrate = scoreProcessor ?
-            scoreProcessor.estimator.getEstimate() > 1 ?
-              scoreProcessor.representation.bitrate : undefined :
-            undefined;
-
-          if (lastEstimationMode === "buffer") {
+          if (forceBandwidthMode) {
             return {
               bitrate: bandwidthEstimate,
-              representation: chosenRepFromBufferBasedABR,
-              urgent: this._throughputChooser.isUrgent(
-                chosenRepFromBufferBasedABR.bitrate, clock),
+              representation: chosenRepFromBandwidth,
+              urgent: this._throughputChooser
+                .isUrgent(chosenRepFromBandwidth.bitrate, clock),
+              manual: false,
+              lastStableBitrate,
+            };
+          }
+
+          if (
+            chosenRepFromBufferBasedABR == null ||
+            chosenRepFromBandwidth.bitrate >= chosenRepFromBufferBasedABR.bitrate
+          ) {
+            return {
+              bitrate: bandwidthEstimate,
+              representation: chosenRepFromBandwidth,
+              urgent: this._throughputChooser
+                .isUrgent(chosenRepFromBandwidth.bitrate, clock),
               manual: false,
               lastStableBitrate,
             };
           }
           return {
             bitrate: bandwidthEstimate,
-            representation: chosenRepFromBandwidth,
+            representation: chosenRepFromBufferBasedABR,
             urgent: this._throughputChooser.isUrgent(
-              chosenRepFromBandwidth.bitrate, clock),
+              chosenRepFromBufferBasedABR.bitrate, clock),
             manual: false,
             lastStableBitrate,
           };
@@ -362,12 +416,12 @@ export default class RepresentationChooser {
   public addEstimate(
     duration : number,
     size : number,
-    content: { segment: ISegment; representation: Representation }
+    content: { segment: ISegment } // XXX TODO compare with current representation?
   ) : void {
     this._throughputChooser.addEstimate(duration, size); // calculate bandwidth
 
     // calculate "maintainability score"
-    const { segment, representation } = content;
+    const { segment } = content;
     if (segment.duration == null) {
       return;
     }
@@ -375,17 +429,13 @@ export default class RepresentationChooser {
     const segmentDuration = segment.duration / segment.timescale;
     const ratio = segmentDuration / requestDuration;
 
-    const scoreProcessor = this._representationScore$.getValue();
-    if (
-      scoreProcessor != null &&
-      representation.id === scoreProcessor.representation.id
-    ) {
-      scoreProcessor.estimator.addSample(requestDuration, ratio);
+    if (this._scoreEstimator != null) {
+      this._scoreEstimator.addSample(requestDuration, ratio);
       return;
     }
     const newEWMA = new EWMA(5);
     newEWMA.addSample(requestDuration, ratio);
-    this._representationScore$.next({ representation, estimator: newEWMA });
+    this._scoreEstimator = newEWMA;
   }
 
   /**

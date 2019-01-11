@@ -61,10 +61,6 @@ interface IParsedSegment<T> {
 
 export interface IFetchedSegment<T> {
   parse : (init? : ISegmentTimingInfos) => Observable<IParsedSegment<T>>;
-  requestInfos : {
-    receivedTime? : number;
-    sendingTime? : number;
-  };
 }
 
 export type ISegmentFetcher<T> =
@@ -221,17 +217,11 @@ export default function createSegmentFetcher<T>(
             const { value } = response;
             const parserArg = objectAssign({ response: value, init }, content);
             return segmentParser(parserArg)
-              .pipe(
-                catchError((error) => {
+              .pipe(catchError((error) => {
                 const formattedError = isKnownError(error) ?
                   error : new OtherError("PIPELINE_PARSING_ERROR", error, true);
-                  throw formattedError;
-                })
-              );
-          },
-          requestInfos: {
-            receivedTime: response.value.receivedTime,
-            sendingTime: response.value.sendingTime,
+                throw formattedError;
+              }));
           },
         };
       }),

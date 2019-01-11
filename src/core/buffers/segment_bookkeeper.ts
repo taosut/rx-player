@@ -650,13 +650,6 @@ export default class SegmentBookkeeper {
     }
   }
 
-  public getSegments(range: { start: number; end: number }) {
-    return this.inventory.filter((segment) => {
-      return segment.end > range.start && segment.start <= range.end ||
-        segment.start < range.end && segment.end >= range.start;
-    });
-  }
-
   /**
    * Empty the current inventory
    */

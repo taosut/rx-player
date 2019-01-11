@@ -24,7 +24,10 @@ import {
 import SimpleSet from "../../../utils/simple_set";
 import SegmentBookkeeper from "../segment_bookkeeper";
 
-const { MINIMUM_SEGMENT_SIZE } = config;
+const {
+  BITRATE_REBUFFERING_RATIO,
+  MINIMUM_SEGMENT_SIZE,
+} = config;
 
 /**
  * Returns true if the given Segment should be downloaded.
@@ -49,11 +52,7 @@ export default function shouldDownloadSegment(
   segmentIDsToIgnore : SimpleSet,
   lastStableBitrate? : number
 ) : boolean {
-  const {
-    period,
-    adaptation,
-    representation,
-  } = content;
+  const { period, adaptation, representation } = content;
   const shouldIgnore = segmentIDsToIgnore.test(segment.id);
   if (shouldIgnore) {
     return false;
@@ -90,7 +89,11 @@ export default function shouldDownloadSegment(
     return true;
   }
 
-  // only re-load comparatively-poor bitrates for the same adaptation.
-  const bitrateCeil = lastStableBitrate ? lastStableBitrate : Infinity;
-  return representation.bitrate > bitrateCeil;
+  if (lastStableBitrate == null) {
+    // only re-load comparatively-poor bitrates for the same adaptation.
+    const bitrateCeil = currentSegment.infos.representation.bitrate *
+      BITRATE_REBUFFERING_RATIO;
+    return representation.bitrate > bitrateCeil;
+  }
+  return currentSegment.infos.representation.bitrate < lastStableBitrate;
 }

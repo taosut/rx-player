@@ -79,14 +79,6 @@ import getSegmentsNeeded from "./get_segments_needed";
 import getWantedRange from "./get_wanted_range";
 import segmentFilter from "./segment_filter";
 
-import { getLeftSizeOfRange } from "../../../utils/ranges";
-
-export interface IAppendedSegment {
-  representation: Representation;
-  segment: ISegment;
-  bufferGap? : number;
-}
-
 // Item emitted by the Buffer's clock$
 export interface IRepresentationBufferClockTick {
   buffered : TimeRanges; // buffered ranged of the SourceBuffer
@@ -113,7 +105,6 @@ export interface IRepresentationBufferArguments<T> {
   segmentFetcher : IPrioritizedSegmentFetcher<T>;
   terminate$ : Observable<void>;
   wantedBufferAhead$ : Observable<number>;
-  appendSegment$: Subject<IAppendedSegment>;
   lastStableBitrate$: BehaviorSubject<undefined|number>;
 }
 
@@ -136,7 +127,6 @@ interface ISegmentObject<T> {
   segmentInfos : ISegmentInfos|null; // informations about the segment's start
                                      // and duration
   segmentOffset : number; // Offset to add to the segment at decode time
-  requestTime? : number;
 }
 
 // Informations about a loaded and parsed Segment
@@ -172,7 +162,6 @@ export default function RepresentationBuffer<T>({
   segmentFetcher, // allows to download new segments
   terminate$, // signal the RepresentationBuffer that it should terminate
   wantedBufferAhead$, // emit the buffer goal,
-  appendSegment$,
   lastStableBitrate$,
 } : IRepresentationBufferArguments<T>) : Observable<IRepresentationBufferEvent<T>> {
   const { manifest, period, adaptation, representation } = content;
@@ -211,7 +200,7 @@ export default function RepresentationBuffer<T>({
     terminate$.pipe(take(1), mapTo(true), startWith(false)),
     finishedDownloadQueue$.pipe(startWith(undefined))
   ).pipe(
-    map(function getCurrentStatus([ timing, bufferGoal, terminate ]) : {
+    map(function getCurrentStatus([timing, bufferGoal, terminate]) : {
       discontinuity : number;
       isFull : boolean;
       terminate : boolean;
@@ -229,8 +218,7 @@ export default function RepresentationBuffer<T>({
         .shouldRefresh(neededRange.start, neededRange.end);
 
       let neededSegments = getSegmentsNeeded(representation, neededRange)
-        .filter((segment) =>
-          shouldDownloadSegment(segment, neededRange, lastStableBitrate$.getValue()))
+        .filter((segment) => shouldDownloadSegment(segment, neededRange))
         .map((segment) => ({
           priority: getSegmentPriority(segment, timing),
           segment,
@@ -374,13 +362,13 @@ export default function RepresentationBuffer<T>({
 
         currentSegmentRequest = { segment, priority, request$ };
         const response$ = request$.pipe(
-              mergeMap((fetchedSegment) => {
-                currentSegmentRequest = null;
-                const initInfos = initSegmentObject &&
-                  initSegmentObject.segmentInfos || undefined;
-                return fetchedSegment.parse(initInfos);
-              }),
-              map((args) => ({ segment, value: args }))
+          mergeMap((fetchedSegment) => {
+            currentSegmentRequest = null;
+            const initInfos = initSegmentObject &&
+              initSegmentObject.segmentInfos || undefined;
+            return fetchedSegment.parse(initInfos);
+          }),
+          map((args) => ({ segment, value: args }))
         );
 
         return observableConcat(response$, requestNextSegment$);
@@ -427,22 +415,14 @@ export default function RepresentationBuffer<T>({
             return;
           }
           const { time, duration, timescale } = segmentInfos != null ?
-          segmentInfos : segment;
+            segmentInfos : segment;
           const start = time / timescale;
           const end = duration && (time + duration) / timescale;
           segmentBookkeeper
             .insert(period, adaptation, representation, segment, start, end);
-          const videoElement = document.getElementsByTagName("video")[0];
-          const timeRanges = queuedSourceBuffer.getBuffered();
-          const currentTime = videoElement.currentTime;
-          const bufferGap = getLeftSizeOfRange(timeRanges, currentTime);
-          appendSegment$.next({
-            representation,
-            segment,
-            bufferGap,
-          });
         }),
-        mapTo(EVENTS.addedSegment(bufferType, segment, segmentData)),
+        mapTo(EVENTS.addedSegment(
+          bufferType, segment, queuedSourceBuffer.getBuffered(), segmentData)),
         finalize(() => { // remove from queue
           sourceBufferWaitingQueue.remove(segment.id);
         }));
@@ -457,9 +437,9 @@ export default function RepresentationBuffer<T>({
    */
   function shouldDownloadSegment(
     segment : ISegment,
-    neededRange : { start: number; end: number },
-    lastStableBitrate? : number
+    neededRange : { start: number; end: number }
   ) : boolean {
+    const lastStableBitrate = lastStableBitrate$.getValue();
     return segmentFilter(
       segment,
       content,
