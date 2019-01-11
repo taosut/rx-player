@@ -17,9 +17,15 @@
 import { Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import log from "../../log";
-import { Representation } from "../../manifest";
 import arrayFind from "../../utils/array_find";
 import arrayFindIndex from "../../utils/array_find_index";
+
+export interface IBufferBasedChooserClockTick {
+  bufferGap : number;
+  currentBitrate? : number;
+  currentScore? : number;
+  playbackRate : number;
+}
 
 /**
  * From the buffer gap, choose a representation.
@@ -29,49 +35,55 @@ import arrayFindIndex from "../../utils/array_find_index";
  * @returns {Object|undefined}
  */
 function getEstimateFromBufferLevels(
+  clockTick : IBufferBasedChooserClockTick,
   bitrates : number[],
-  currentRepresentation : Representation,
-  bufferLevels : number[],
-  bufferGap : number,
-  score? : number
+  bufferLevels : number[]
 ) : number|undefined {
-  const currentScoreIndex = arrayFindIndex(bitrates, (bitrate) => {
-    return bitrate === currentRepresentation.bitrate;
-  });
+  const { bufferGap, currentBitrate, currentScore, playbackRate } = clockTick;
+  if (currentBitrate == null) {
+    return undefined;
+  }
+  const currentScoreIndex = arrayFindIndex(bitrates, b => b === currentBitrate);
   if (currentScoreIndex < 0 || currentScoreIndex > bufferLevels.length) {
     log.error("ABR: Current Representation not found in the calculated levels");
     return bitrates[0];
   }
 
-  if (score == null || score > 1) {
+  let scaledScore : number|undefined;
+  if (currentScore != null) {
+    scaledScore = playbackRate === 0 ?
+      currentScore : (currentScore / playbackRate);
+  }
+
+  if (scaledScore == null || scaledScore > 1) {
     const minBufferLevel = bufferLevels[currentScoreIndex + 1];
     if (bufferGap && bufferGap > minBufferLevel) {
       const upperBitrate = arrayFind(bitrates, (bitrate) => {
-        return bitrate > currentRepresentation.bitrate;
+        return bitrate > currentBitrate;
       });
-      return upperBitrate != null ? upperBitrate : currentRepresentation.bitrate;
+      return upperBitrate != null ? upperBitrate : currentBitrate;
     }
   }
 
-  if (score == null || score < 1.15) {
+  if (scaledScore == null || scaledScore < 1.15) {
     const minBufferLevel = bufferLevels[currentScoreIndex + 1];
     if (!bufferGap || bufferGap < minBufferLevel * 0.8) {
       const downerBitrateIndex = arrayFindIndex(bitrates, (bitrate, i) => {
-        return i >= 1 && bitrates[i - 1] < currentRepresentation.bitrate &&
-          bitrate === currentRepresentation.bitrate;
+        return i >= 1 && bitrates[i - 1] < currentBitrate &&
+          bitrate === currentBitrate;
       }) - 1;
       return bitrates[downerBitrateIndex] != null ?
-        bitrates[downerBitrateIndex] : currentRepresentation.bitrate;
+        bitrates[downerBitrateIndex] : currentBitrate;
     }
   }
-  return currentRepresentation.bitrate;
+  return currentBitrate;
 }
 
 /**
- * Choose a Representation based on the currently available buffer.
+ * Choose a bitrate based on the currently available buffer.
  *
  * This algorithm is based on the deviation of the BOLA algorithm.
- * It is a hybrid solution that also relies on representations
+ * It is a hybrid solution that also relies on a given bitrate's
  * "maintainability".
  * Each time a chunk is downloaded, from the ratio between the chunk duration
  * and chunk's request time, we can assume that the representation is
@@ -83,22 +95,14 @@ function getEstimateFromBufferLevels(
  * @returns {Observable}
  */
 export default function BufferBasedChooser(
-  update$ : Observable<{
-    bufferGap : number;
-    currentRepresentation? : Representation|null;
-    currentScore? : number;
-  }>,
+  update$ : Observable<IBufferBasedChooserClockTick>,
   bitrates: number[]
 ) : Observable<number|undefined> {
   const logs = bitrates
-    .map((r) => Math.log(bitrates[r] / bitrates[0]));
+    .map((b) => Math.log(b / bitrates[0]));
   const utilities = logs.map(l => l - logs[0] + 1); // normalize
-  const gp =
-    // 20 is the buffer gap when we want to reach maximum quality.
-    (utilities[utilities.length - 1] - 1) /
-    ((bitrates.length * 2) + 10);
+  const gp = (utilities[utilities.length - 1] - 1) / ((bitrates.length * 2) + 10);
   const Vp = 1 / gp;
-
   const levelsMap : number[] = bitrates
     .map((_, i) => minBufferLevelForRepresentation(i));
 
@@ -108,10 +112,13 @@ export default function BufferBasedChooser(
    * @returns {number}
    */
   function minBufferLevelForRepresentation(index: number): number {
-    if (index < 1 && index >= bitrates.length) {
+    if (index < 0 && index >= bitrates.length) {
       log.warn("ABR: Trying to get min buffer level of out-of-bound representation.");
     }
-    const boundedIndex = Math.min(Math.max(0, index), bitrates.length - 1);
+    if (index === 0) {
+      return 0;
+    }
+    const boundedIndex = Math.min(Math.max(1, index), bitrates.length - 1);
     return Vp * (gp + (bitrates[boundedIndex] * utilities[boundedIndex - 1] -
       bitrates[boundedIndex - 1] * utilities[boundedIndex]) / (bitrates[boundedIndex] -
       bitrates[boundedIndex - 1]));
@@ -121,16 +128,7 @@ export default function BufferBasedChooser(
     return minBufferLevelForRepresentation(i);
   }));
 
-  return update$
-    .pipe(map(({ bufferGap, currentRepresentation, currentScore }) => {
-      if (currentRepresentation == null) {
-        return undefined;
-      }
-      return getEstimateFromBufferLevels(
-        bitrates,
-        currentRepresentation,
-        levelsMap,
-        bufferGap,
-        currentScore);
-    }));
+  return update$.pipe(map((clockTick) => {
+    return getEstimateFromBufferLevels(clockTick, bitrates, levelsMap);
+  }));
 }

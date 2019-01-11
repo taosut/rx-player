@@ -302,21 +302,20 @@ export default class RepresentationChooser {
 
       // Emit each time a buffer-based estimation should be actualized.
       // (basically, each time a segment is added)
-      const updateBufferEstimation$ = bufferEvents$.pipe(
+      const bufferBasedClock$ = bufferEvents$.pipe(
         filter((e) : e is IBufferEventAddedSegment => e.type === "added-segment"),
         map((addedSegmentEvt) => {
-          const { currentTime } = this._mediaElement;
+          const { currentTime, playbackRate } = this._mediaElement;
           const timeRanges = addedSegmentEvt.value.buffered;
           const bufferGap = getLeftSizeOfRange(timeRanges, currentTime);
           const currentScore = this._scoreEstimator == null ?
             undefined : this._scoreEstimator.getEstimate();
-          return { bufferGap, currentRepresentation, currentScore };
+          return { bufferGap, currentRepresentation, currentScore, playbackRate };
         })
       );
 
       const bitrates = representations.map(r => r.bitrate);
-      const bufferBasedEstimation$ =
-        BufferBasedChooser(updateBufferEstimation$, bitrates);
+      const bufferBasedEstimation$ = BufferBasedChooser(bufferBasedClock$, bitrates);
 
       return observableCombineLatest(
         clock$,
