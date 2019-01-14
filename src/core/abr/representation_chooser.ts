@@ -279,6 +279,7 @@ export default class RepresentationChooser {
       takeUntil(this._dispose$)
     ).subscribe(evt => {
       currentRepresentation = evt.value.representation;
+      console.error("RESETTING", currentRepresentation.bitrate);
       this._scoreEstimator = null; // reset the score
     });
 
@@ -308,9 +309,11 @@ export default class RepresentationChooser {
           const { currentTime, playbackRate } = this._mediaElement;
           const timeRanges = addedSegmentEvt.value.buffered;
           const bufferGap = getLeftSizeOfRange(timeRanges, currentTime);
+          const currentBitrate = currentRepresentation == null ?
+            undefined : currentRepresentation.bitrate;
           const currentScore = this._scoreEstimator == null ?
             undefined : this._scoreEstimator.getEstimate();
-          return { bufferGap, currentRepresentation, currentScore, playbackRate };
+          return { bufferGap, currentBitrate, currentScore, playbackRate };
         })
       );
 
@@ -347,14 +350,6 @@ export default class RepresentationChooser {
             forceBandwidthMode = false;
           }
 
-          const videal = document.querySelector("video");
-          console.log(
-            "!!! MODE",
-            forceBandwidthMode,
-            this._scoreEstimator && this._scoreEstimator.getEstimate(),
-            videal && getLeftSizeOfRange(videal.buffered, videal.currentTime)
-          );
-
           let lastStableBitrate : number|undefined;
           if (this._scoreEstimator) {
             if (currentRepresentation == null) {
@@ -365,7 +360,16 @@ export default class RepresentationChooser {
             }
           }
 
+          const videal = document.querySelector("video");
+
           if (forceBandwidthMode) {
+            console.log(
+              "!!! BW",
+              forceBandwidthMode,
+              this._scoreEstimator && this._scoreEstimator.getEstimate(),
+              videal && getLeftSizeOfRange(videal.buffered, videal.currentTime)
+            );
+
             return {
               bitrate: bandwidthEstimate,
               representation: chosenRepFromBandwidth,
@@ -380,6 +384,13 @@ export default class RepresentationChooser {
             bufferBasedBitrate == null ||
             chosenRepFromBandwidth.bitrate >= bufferBasedBitrate
           ) {
+            console.log(
+              "!!! BW2",
+              bufferBasedBitrate,
+              forceBandwidthMode,
+              this._scoreEstimator && this._scoreEstimator.getEstimate(),
+              videal && getLeftSizeOfRange(videal.buffered, videal.currentTime)
+            );
             return {
               bitrate: bandwidthEstimate,
               representation: chosenRepFromBandwidth,
@@ -391,6 +402,12 @@ export default class RepresentationChooser {
           }
           const chosenRepresentation =
             fromBitrateCeil(_representations, bufferBasedBitrate) || _representations[0];
+          console.log(
+            "!!! Buffer",
+            forceBandwidthMode,
+            this._scoreEstimator && this._scoreEstimator.getEstimate(),
+            videal && getLeftSizeOfRange(videal.buffered, videal.currentTime)
+          );
           return {
             bitrate: bandwidthEstimate,
             representation: chosenRepresentation,
@@ -426,6 +443,7 @@ export default class RepresentationChooser {
     this._networkAnalyzer.addEstimate(duration, size); // calculate bandwidth
 
     // calculate "maintainability score"
+    console.error("REQUEST", (content as any).bitrate, this._scoreEstimator);
     const { segment } = content;
     if (segment.duration == null) {
       return;

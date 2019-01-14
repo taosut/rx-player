@@ -186,7 +186,6 @@ export default class ABRManager {
 
     // Will contain options used when (lazily) instantiating a
     // RepresentationChooser
-
     this._chooserInstanceOptions = {
       initialBitrates: options.initialBitrates || {},
       manualBitrates: options.manualBitrates || {},

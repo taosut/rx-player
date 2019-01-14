@@ -120,7 +120,7 @@ export default function BufferBasedChooser(
     const boundedIndex = Math.min(Math.max(1, index), bitrates.length - 1);
     return Vp * (gp + (bitrates[boundedIndex] * utilities[boundedIndex - 1] -
       bitrates[boundedIndex - 1] * utilities[boundedIndex]) / (bitrates[boundedIndex] -
-      bitrates[boundedIndex - 1]));
+      bitrates[boundedIndex - 1])) + 4;
   }
 
   console.log("??????", bitrates.map((_r : any, i : number) => {
