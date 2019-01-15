@@ -27,12 +27,14 @@ import {
   timer as observableTimer,
 } from "rxjs";
 import {
+  filter,
   ignoreElements,
   map,
   mergeMap,
   share,
   startWith,
   switchMap,
+  take,
   takeUntil,
   tap,
 } from "rxjs/operators";
@@ -203,89 +205,97 @@ export default function InitializeOnMediaSource({
     sendingTime? : number;
   }>(1);
 
-  const loadContent$ = observableCombineLatest(
-    openMediaSource(mediaElement),
-    fetchManifest(url)
-  ).pipe(mergeMap(([ mediaSource, { manifest, sendingTime } ]) => {
+  const initiatedEME$ = emeManager$.pipe(
+    filter(({ type }) => type === "eme-init" || type === "eme-disabled"),
+    take(1)
+  );
 
-    /**
-     * Refresh the manifest on subscription.
-     * @returns {Observable}
-     */
-    function refreshManifest() : Observable<never> {
-      const refreshURL = manifest.getUrl();
-      if (!refreshURL) {
-        log.warn("Init: Cannot refresh the manifest: no url");
-        return EMPTY;
-      }
+  const loadContent$ = initiatedEME$.pipe(
+    mergeMap(() => observableCombineLatest(
+        openMediaSource(mediaElement),
+        fetchManifest(url)
+      ).pipe(mergeMap(([ mediaSource, { manifest, sendingTime } ]) => {
 
-      return fetchManifest(refreshURL).pipe(
-        tap(({ manifest: newManifest, sendingTime: newSendingTime }) => {
-          manifest.update(newManifest);
-          manifestRefreshed$.next({ manifest, sendingTime: newSendingTime });
-        }),
-        ignoreElements(),
-        share() // share the previous side-effect
-      );
-    }
+        /**
+         * Refresh the manifest on subscription.
+         * @returns {Observable}
+         */
+        function refreshManifest() : Observable<never> {
+          const refreshURL = manifest.getUrl();
+          if (!refreshURL) {
+            log.warn("Init: Cannot refresh the manifest: no url");
+            return EMPTY;
+          }
 
-    const loadOnMediaSource = createMediaSourceLoader({ // Behold!
-      mediaElement,
-      manifest,
-      clock$,
-      speed$,
-      abrManager,
-      segmentPipelinesManager,
-      bufferOptions: objectAssign({
-        textTrackOptions,
-        offlineRetry: networkConfig.offlineRetry,
-        segmentRetry: networkConfig.segmentRetry,
-      }, bufferOptions),
-    });
-
-    log.debug("Init: Calculating initial time");
-    const initialTime = getInitialTime(manifest, startAt);
-    log.debug("Init: Initial time calculated:", initialTime);
-
-    const reloadMediaSource$ = new Subject<void>();
-    const onEvent =
-      createEventListener(reloadMediaSource$, refreshManifest);
-    const handleReloads$ : Observable<IInitEvent> = reloadMediaSource$.pipe(
-      switchMap(() => {
-        const currentPosition = mediaElement.currentTime;
-        const isPaused = mediaElement.paused;
-        return openMediaSource(mediaElement).pipe(
-          mergeMap(newMS => loadOnMediaSource(newMS, currentPosition, !isPaused)),
-          mergeMap(onEvent),
-          startWith(EVENTS.reloadingMediaSource())
-        );
-      })
-    );
-
-    const loadOnMediaSource$ = observableConcat(
-      observableOf(EVENTS.manifestReady(abrManager, manifest)),
-      loadOnMediaSource(mediaSource, initialTime, autoPlay).pipe(
-        takeUntil(reloadMediaSource$),
-        mergeMap(onEvent)
-      )
-    );
-
-    // Emit when the manifest should be refreshed due to its lifetime being expired
-    const manifestAutoRefresh$ = manifestRefreshed$.pipe(
-      startWith({ manifest, sendingTime }),
-      switchMap(({ manifest: newManifest, sendingTime: newSendingTime }) => {
-        if (newManifest.lifetime) {
-          const timeSinceRequest = newSendingTime == null ?
-            0 : performance.now() - newSendingTime;
-          const updateTimeout = newManifest.lifetime * 1000 - timeSinceRequest;
-          return observableTimer(updateTimeout);
+          return fetchManifest(refreshURL).pipe(
+            tap(({ manifest: newManifest, sendingTime: newSendingTime }) => {
+              manifest.update(newManifest);
+              manifestRefreshed$.next({ manifest, sendingTime: newSendingTime });
+            }),
+            ignoreElements(),
+            share() // share the previous side-effect
+          );
         }
-        return EMPTY;
-      })
-    ).pipe(mergeMap(refreshManifest));
 
-    return observableMerge(loadOnMediaSource$, handleReloads$, manifestAutoRefresh$);
-  }));
+        const loadOnMediaSource = createMediaSourceLoader({ // Behold!
+          mediaElement,
+          manifest,
+          clock$,
+          speed$,
+          abrManager,
+          segmentPipelinesManager,
+          bufferOptions: objectAssign({
+            textTrackOptions,
+            offlineRetry: networkConfig.offlineRetry,
+            segmentRetry: networkConfig.segmentRetry,
+          }, bufferOptions),
+        });
+
+        log.debug("Init: Calculating initial time");
+        const initialTime = getInitialTime(manifest, startAt);
+        log.debug("Init: Initial time calculated:", initialTime);
+
+        const reloadMediaSource$ = new Subject<void>();
+        const onEvent =
+          createEventListener(reloadMediaSource$, refreshManifest);
+        const handleReloads$ : Observable<IInitEvent> = reloadMediaSource$.pipe(
+          switchMap(() => {
+            const currentPosition = mediaElement.currentTime;
+            const isPaused = mediaElement.paused;
+            return openMediaSource(mediaElement).pipe(
+              mergeMap(newMS => loadOnMediaSource(newMS, currentPosition, !isPaused)),
+              mergeMap(onEvent),
+              startWith(EVENTS.reloadingMediaSource())
+            );
+          })
+        );
+
+        const loadOnMediaSource$ = observableConcat(
+          observableOf(EVENTS.manifestReady(abrManager, manifest)),
+          loadOnMediaSource(mediaSource, initialTime, autoPlay).pipe(
+            takeUntil(reloadMediaSource$),
+            mergeMap(onEvent)
+          )
+        );
+
+        // Emit when the manifest should be refreshed due to its lifetime being expired
+        const manifestAutoRefresh$ = manifestRefreshed$.pipe(
+          startWith({ manifest, sendingTime }),
+          switchMap(({ manifest: newManifest, sendingTime: newSendingTime }) => {
+            if (newManifest.lifetime) {
+              const timeSinceRequest = newSendingTime == null ?
+                0 : performance.now() - newSendingTime;
+              const updateTimeout = newManifest.lifetime * 1000 - timeSinceRequest;
+              return observableTimer(updateTimeout);
+            }
+            return EMPTY;
+          })
+        ).pipe(mergeMap(refreshManifest));
+
+        return observableMerge(loadOnMediaSource$, handleReloads$, manifestAutoRefresh$);
+      }))
+    )
+  );
 
   return observableMerge(
     loadContent$,
